@@ -68,8 +68,6 @@ double euclideanDistance(const cv::Point &p1, const cv::Point &p2)
 
 int main()
 {
-
-
     std::string home_path = getenv("HOME");
     //std::cout << home_path << std::endl;
     
