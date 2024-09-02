@@ -34,8 +34,8 @@ cv::Mat makeFreeSpace(cv::Mat &src)
         for (int j=0; j<cols; j++)
         {
             uchar pixelValue = src.at<uchar>(i, j);
-            //if (pixelValue > 128) {
-            if (pixelValue > 205) {
+            if (pixelValue > 128) {
+            //if (pixelValue > 205) {
                 dst.at<uchar>(i, j) = 255;
             }
         }
@@ -66,52 +66,112 @@ double euclideanDistance(const cv::Point &p1, const cv::Point &p2)
 }
  
 
-void drawRectanglesAlongLine(cv::Mat& image, const std::vector<cv::Point>& points, int boxWidth, int boxHeight) {
-   if (points.size() < 2) {
-        std::cerr << "Not enough points to draw boxes." << std::endl;
-        return;
-    }
+void exploreCircleLine(cv::Mat& image, const std::vector<cv::Point>& points, int radius) 
+{
+    if (points.empty()) return;
 
-    for (size_t i = 0; i < points.size(); i+=10) {
-        // 현재 점에서의 방향 벡터 계산
-        cv::Point direction;
+    // 원의 지름 계산
+    int diameter = 1.5* radius;
 
-        if (i < points.size() - 1) {
-            direction = points[i + 1] - points[i];
-        } else if (i > 0) {
-            direction = points[i] - points[i - 1];
+    // 첫 번째 점에서 원을 그림
+    cv::Point prevPoint = points[0];
+    //cv::circle(image, prevPoint, radius, CV_RGB(0, 255, 0), 1);
+
+    for (size_t i = 1; i < points.size(); i++) 
+    {
+        cv::Point currentPoint = points[i];
+
+        // 이전 점과 현재 점 사이의 거리 계산
+        double distance = cv::norm(currentPoint - prevPoint);
+
+        // 거리가 반지름 두 배보다 크거나 같을 때만 원을 그림
+        if (distance >= diameter) 
+        {
+            // 원을 그리는 위치 계산
+            cv::circle(image, currentPoint, radius, CV_RGB(0, 255, 0), 1);
+            
+            // 반경 내의 모든 점을 탐색
+            for (int y = -radius; y <= radius; ++y)
+            {
+                for (int x = -radius; x <= radius; ++x)
+                {
+                    // 현재 점이 원의 내부에 있는지 확인
+                    if (x * x + y * y <= radius * radius) {
+                        // 원의 내부에 있는 점에서 수행할 작업
+                        cv::Point pointInCircle = currentPoint + cv::Point(x, y);
+                        if (pointInCircle.x >= 0 && pointInCircle.x < image.cols &&
+                            pointInCircle.y >= 0 && pointInCircle.y < image.rows)
+                        {
+                            // 이미지 범위를 벗어나지 않는 점에 대해서만 처리
+                            image.at<cv::Vec3b>(pointInCircle) = cv::Vec3b(0, 0, 255); // 빨간색으로 점 찍기
+                        }
+                    }
+                }
+            }
+            prevPoint = currentPoint;  // 이전 점을 업데이트
         }
-
-
-        double length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
-        if (length == 0) continue;
-
-        cv::Point unitDirection = cv::Point(cvRound(direction.x / length), cvRound(direction.y / length));
-        cv::Point normal(unitDirection.y, unitDirection.x);
-
-        // 박스의 네 모서리 점 계산
-        cv::Point p1 = points[i] + normal * (boxHeight / 2) - unitDirection * (boxWidth / 2);
-        cv::Point p2 = points[i] - normal * (boxHeight / 2) - unitDirection * (boxWidth / 2);
-        cv::Point p3 = points[i] - normal * (boxHeight / 2) + unitDirection * (boxWidth / 2);
-        cv::Point p4 = points[i] + normal * (boxHeight / 2) + unitDirection * (boxWidth / 2);
-
-
-        
-        // 박스의 네 모서리 점을 연결하여 박스를 그리기
-        // std::vector<cv::Point> boxPoints = { p1, p2, p3, p4, p1 };  // 마지막 점을 추가하여 박스 닫기
-        // cv::polylines(image, boxPoints, false, cv::Scalar(0, 0, 255), 1);
-
-               // 박스의 좌측 상단과 우측 하단 모서리 점 계산
-        cv::Point topLeft = cv::Point(std::min({p1.x, p2.x, p3.x, p4.x}), std::min({p1.y, p2.y, p3.y, p4.y}));
-        cv::Point bottomRight = cv::Point(std::max({p1.x, p2.x, p3.x, p4.x}), std::max({p1.y, p2.y, p3.y, p4.y}));
-        
-        cv::Rect box(topLeft, bottomRight);
-        cv::Point center_box = (topLeft + bottomRight) * 0.5;
-        // 박스를 그리기
-        //cv::rectangle(image, box, cv::Scalar(255, 0, 0), 1);
-        cv::circle(image, center_box, 3, CV_RGB(0, 255, 0), -1);
     }
 }
+
+
+void exploreBoxLine(cv::Mat& image, const std::vector<cv::Point>& points, int radius, 
+                    std::vector<cv::Rect>& boundingBoxes) 
+{
+    if (points.empty()) return;
+
+    // 첫 번째 점에서 박스를 그림
+    cv::Point prevPoint = points[0];
+    cv::Rect initialBox(prevPoint.x - radius, prevPoint.y - radius, 2 * radius, 2 * radius);
+    cv::rectangle(image, initialBox, CV_RGB(0, 255, 0), 1);    
+    
+    cv::Point center(initialBox.x + initialBox.width / 2, initialBox.y + initialBox.height / 2);
+    circle(image, center, 3, Scalar(255, 255, 0), -1); // 빨간색 점
+
+    boundingBoxes.push_back(initialBox); // 박스 저장
+
+    for (size_t i = 1; i < points.size(); i+=radius) 
+    {
+        cv::Point currentPoint = points[i];
+
+        // 이전 점과 현재 점 사이의 거리 계산
+        double distance = cv::norm(currentPoint - prevPoint);
+
+        // 거리가 반지름 두 배보다 크거나 같을 때만 박스를 그림
+        if (distance >= 1.5 * radius) 
+        {
+            // 박스의 좌측 상단 점과 우측 하단 점 계산
+            cv::Rect box(currentPoint.x - radius, currentPoint.y - radius, 2 * radius, 2 * radius);
+            cv::rectangle(image, box, CV_RGB(0, 255, 0), 1);
+            // 박스의 중심점 계산
+            cv::Point center(box.x + box.width / 2, box.y + box.height / 2);
+            // 중심점 표시
+            circle(image, center, 3,  Scalar(255, 255, 0), -1); // 빨간색 점
+
+            boundingBoxes.push_back(box); // 박스 저장            
+            
+            prevPoint = currentPoint;  // 이전 점을 업데이트
+        }
+    }
+}
+
+// // 점이 박스 안에 있는지 검사
+// bool isPointInBoundingBox(const cv::Point& point, const std::vector<cv::Rect>& boundingBoxes)
+// {
+//     for (const auto& box : boundingBoxes)
+//     {
+//         if (box.contains(point))
+//         {
+//             return true;
+//         }
+//     }
+//     return false;
+// }
+// 점이 박스 안에 있는지 검사
+bool isPointInBoundingBox(const cv::Point& point, const cv::Rect& box)
+{
+    return box.contains(point);
+}
+
 
 // 점들을 순차적으로 정렬하여 실선 재구성
 std::vector<cv::Point> sortPoints(const std::vector<cv::Point>& points) {
@@ -135,6 +195,15 @@ std::vector<cv::Point> sortPoints(const std::vector<cv::Point>& points) {
 
     return sortedPoints;
 }
+// 사용자 정의 비교 함수
+struct RectCompare {
+    bool operator()(const cv::Rect& lhs, const cv::Rect& rhs) const {
+        if (lhs.y != rhs.y) return lhs.y < rhs.y;
+        if (lhs.x != rhs.x) return lhs.x < rhs.x;
+        if (lhs.height != rhs.height) return lhs.height < rhs.height;
+        return lhs.width < rhs.width;
+    }
+};
 
 int main()
 {
@@ -143,7 +212,7 @@ int main()
     
     // 이미지 파일 경로
     cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
-    //cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
+    //cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
     if (raw_img.empty())
     {
         std::cerr << "Error: Unable to open image file: " << std::endl;
@@ -151,182 +220,135 @@ int main()
     }
     cv::Mat result_img;
     cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
+    cv::Mat result_img2 = result_img.clone();
 
-    std::vector<cv::Point> featurePoints;
-
-    FeatureDetection fd(raw_img, featurePoints);
-    cv::Mat img_lsd = fd.straightLineDetection();
-
-    fd.detectEndPoints(img_lsd, 12);
-    std::vector<cv::Point> updata_featurePoints = fd.updateFeaturePoints();
-
-    //fd.imgShow(updata_featurePoints);
- 
-    //--------------------------------------------------------------------------    
-    cv::Mat img_freeSpace = makeFreeSpace(raw_img);
-    cv::imshow("img_freeSpace", img_freeSpace);
-
-
-    TrajectionPoint tp;
-    cv::Mat img_dist= tp.makeDistanceTransform(img_freeSpace);
-
-    cv::Mat img_skeletion;
-    tp.zhangSuenThinning(img_dist, img_skeletion); 
-    cv::imshow("img_skeletion", img_skeletion);      
-
-    // 꺾이는 지점과 끝점을 저장할 벡터
-    std::vector<cv::Point> trajector_line;
-    std::vector<cv::Point> trajector_points = tp.extractBendingAndEndPoints(img_skeletion, trajector_line);         
-    std::vector<cv::Point> sort_trajector_line = sortPoints(trajector_line);
-
-    cv::Mat test(img_skeletion.size(), CV_8UC3, CV_RGB(0, 0, 0));
+    // std::vector<cv::Point> featurePoints;
+    // FeatureDetection fd(raw_img, featurePoints);
     
-    //for (const auto &pt : sort_trajector_line)
-    for (size_t i =0; i< sort_trajector_line.size(); i+=10)
-    {
-        cv::Point pt = sort_trajector_line[i];
-        cv::circle(test, pt, 1, cv::Scalar(255, 255, 255), -1 );        
-        cv::imshow("test", test);      
-        cv::waitKey(0);
-    }
-         
-    //drawRectanglesAlongLine(test, sort_trajector_line, 10, 30);
+    FeatureDetection fd;
+    //fd.straightLineDetection();
+
+    //cv::imshow("img_lsd", img_lsd);
 
 
-    // for (const auto &pt : sort_trajector_line)
-    // {
-    //     cv::circle(test, pt, 1, cv::Scalar(255, 255, 255), -1 );        
-        
-    // }
+//     //--------------------------------------------------------------------------    
+//     fd.detectEndPoints(img_lsd, 9);
+
+//     std::vector<cv::Point> updata_featurePoints = fd.updateFeaturePoints();
+//     //fd.imgShow(updata_featurePoints);
+
+//     for (const auto &pt : updata_featurePoints)
+//     {
+//         cv::circle(result_img, pt, 3, cv::Scalar(0, 0, 255), -1 );
+//     }
+
+
+//     //--------------------------------------------------------------------------    
+//     cv::Mat img_freeSpace = makeFreeSpace(raw_img);
+//     cv::imshow("img_freeSpace", img_freeSpace);
+
+
+//       // 이진화된 이미지를 반전
+//     Mat invertedImg;
+//     bitwise_not(img_freeSpace, invertedImg);
+//     cv::imshow("invertedImg", invertedImg);
+
+//     // 윤곽선 찾기
+//     vector<vector<Point>> contours;
+//     vector<Vec4i> hierarchy;
+//     findContours(img_freeSpace, contours, hierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
+
+//     cv::Mat color_img_freeSpace;
+//     cv::cvtColor(img_freeSpace, color_img_freeSpace, cv::COLOR_GRAY2RGB);
     
+//     for (size_t i = 0; i < contours.size(); ++i) {
+//         std::cout <<"num: " <<contours[i].size() <<std::endl;
+//         if (contours[i].size() > 10) {
+//             drawContours(color_img_freeSpace, contours, static_cast<int>(i), Scalar(0, 255, 0), 2); 
+//         }
+//     }
+//     cv::imshow("color_img_freeSpace", color_img_freeSpace);
 
-    // for (const auto &pt : trajector_points)
-    // {
-    //     cv::circle(test, pt, 3, cv::Scalar(0, 255, 0), -1 );
-    // }
+
+
+
+
+
+//     TrajectionPoint tp;
+//     cv::Mat img_dist= tp.makeDistanceTransform(img_freeSpace);
+
+//     cv::Mat img_skeletion;
+//     tp.zhangSuenThinning(img_dist, img_skeletion); 
+//     cv::imshow("img_skeletion", img_skeletion);      
+
+//     // 꺾이는 지점과 끝점을 저장할 벡터
+//     std::vector<cv::Point> trajector_line;
+//     std::vector<cv::Point> trajector_points = tp.extractBendingAndEndPoints(img_skeletion, trajector_line);         
+//     std::vector<cv::Point> sort_trajector_line = sortPoints(trajector_line);
+
+
+//     for (const auto &pt : sort_trajector_line)
+//     {
+//         cv::circle(result_img, pt, 1, cv::Scalar(255, 0, 255), -1 );
+//     }
+
+
+
+//     //cv::Mat test(img_skeletion.size(), CV_8UC3, CV_RGB(0, 0, 0));    
+//     //for (const auto &pt : sort_trajector_line)
+//     // for (size_t i =0; i< sort_trajector_line.size(); i+=10)
+//     // {
+//     //     cv::Point pt = sort_trajector_line[i];
+//     //     cv::circle(test, pt, 1, cv::Scalar(255, 255, 255), -1 );        
     
+//     // }
+//     std::vector<cv::Rect> boundingBoxes;
+//     exploreBoxLine(result_img, sort_trajector_line, 20, boundingBoxes);
+
+//     // 박스에 점들을 매핑할 std::map
+//     std::map<cv::Rect, std::vector<cv::Point>, RectCompare> boxToPointsMap;    
+//  // 점들이 각 박스 안에 있는지 검사하고, std::map에 저장
+//     for (const auto& box : boundingBoxes)
+//     {
+//         std::vector<cv::Point> pointsInBox;
+//         for (const auto& pt : updata_featurePoints)
+//         {
+//             if (isPointInBoundingBox(pt, box))
+//             {
+//                 pointsInBox.push_back(pt);
+//             }
+//         }
+
+//         if (!pointsInBox.empty())
+//         {
+//             if (pointsInBox.size() >= 2)
+//                 boxToPointsMap[box] = pointsInBox;
+//         }
+//     }
+
+//         // 결과 출력
+//     for (const auto& entry : boxToPointsMap)
+//     {
+//         const cv::Rect& box = entry.first;
+//         const std::vector<cv::Point>& points = entry.second;
+//         cv::rectangle(result_img2, box, CV_RGB(0, 255, 0), 1);
+
+//         std::cout << "박스 " << box << " 안에 있는 점들: ";
+//         for (const auto& pt : points)
+//         {
+//             std::cout << pt << " ";
+//             // 중심점 표시
+//             circle(result_img2, pt, 3,  CV_RGB(255, 0, 0), -1); 
+//         }
+//         std::cout << std::endl;
+//     }
 
 
-    // 좌표 데이터 처리
-    std::vector<cv::Point> trajectory_features = tp.processTrajectoryFeaturePoints(trajector_points);    
-
-    // 그래프 객체 생성
-    Graph graph;
-    // 이미지를 바탕으로 그래프 구축
-    tp.buildGraphFromImage(graph, img_skeletion, trajectory_features);    
-
-    // 연결된 점들 간의 선을 이미지에 그리기
-    std::vector<cv::Point> vertex;
-    for (const auto &node : graph.adjacencyList)
-    {        
-        if (node.second.size() > 0)
-        {
-            std::cout << "Vertex " << node.first << " is connected to: ";
-            std::cout << "num: " << node.second.size() << std::endl;
-
-            for (const auto &neighbor : node.second)
-            {
-                if (node.first != neighbor)
-                {
-                    line(result_img, node.first, neighbor, cv::Scalar(255, 0, 255), 2);
-                    std::cout << neighbor << " ";
-                    
-                    double dist = tp.euclideanDistance(node.first, neighbor);
-                    std::cout << dist << " ";
-
-                    circle(result_img, node.first, 3, CV_RGB(0, 255, 0), -1); 
-                    
-                    vertex.push_back(node.first);
-                }
-            }
-        }
-        std::cout << std::endl;
-    }
-
-    for (const auto &fp : updata_featurePoints)
-    {
-        circle(result_img, fp, 3, CV_RGB(255, 0, 0), -1); 
-    }
-
-    cv::imshow("result_img", result_img);    
+//     cv::imshow("result_img2", result_img2);  
+//     cv::imshow("result_img", result_img);    
     
-    //--------------------------------------------------------------------------
-
-    //주요
-    //cout <<"----------------------------------------------------------------" << endl;
-   
-   cv::Mat color_img;
-    cv::cvtColor(raw_img, color_img, cv::COLOR_GRAY2RGB);
-    
-    map<Point, vector<Point>, PointCompare> result;
-
-    int rangeX = 15;
-    int rangeY = 15;
-
-    vector<cv::Point> p1 = vertex;
-    std::cout <<"p1.size(): " << p1.size() << std::endl;
-    vector<cv::Point> p2 = updata_featurePoints;
-    std::cout <<"p2.size(): " << p2.size() << std::endl;
-    
-     for (const Point& pt1 : p1) {
-        vector<Point> candidates;
-
-        // p1 점의 주변에서 p2 점을 찾음
-        for (const Point& pt2 : p2) {
-            // 범위 내에 있는지 확인 (p1 점을 중심으로 하는 사각형)
-            if (pt2.x >= pt1.x - rangeX && pt2.x <= pt1.x + rangeX &&
-                pt2.y >= pt1.y - rangeY && pt2.y <= pt1.y + rangeY) {
-                
-                //cv::rectangle(color_img, Point(pt1.x - rangeX, pt1.y - rangeY), Point(pt1.x + rangeX, pt1.y + rangeY), CV_RGB(255, 0, 0));
-
-                candidates.push_back(pt2);
-            }
-        }
-
-        if (candidates.size() > 1) {
-            // 거리 기반으로 정렬
-            sort(candidates.begin(), candidates.end(), [&](const Point& a, const Point& b) {
-                return calculateDistance(pt1, a) < calculateDistance(pt1, b);
-            });
-
-            // 가장 가까운 점 두 개를 찾기
-            vector<Point> closestPoints;
-            if (candidates.size() >= 2) {
-                closestPoints.push_back(candidates[0]);
-                closestPoints.push_back(candidates[1]);
-            }
-
-            // 결과 저장
-            if (closestPoints.size() > 1) {
-                result[pt1] = closestPoints;
-            }
-        }
-    }    
-
-    // 결과 출력
-    for (const auto& pt1 : result) {
-        std::cout << "p1 Point: (" << pt1.first.x << ", " << pt1.first.y << ")" << std::endl;
-        cv::rectangle(color_img, cv::Point(pt1.first.x - rangeX, pt1.first.y - rangeY), 
-                                 cv::Point(pt1.first.x + rangeX, pt1.first.y + rangeY), CV_RGB(255, 0, 0));
-        
-        circle(color_img, pt1.first, 3, CV_RGB(255, 0, 0), -1); 
-
-        for (const Point& pt2 : pt1.second) {
-            std::cout << "  Matching p2 Point: (" << pt2.x << ", " << pt2.y << ")" << std::endl;
-            cv::circle(color_img, pt2, 3, CV_RGB(0, 255, 255), -1); 
-            cv::line(color_img, pt1.first, pt2, CV_RGB(0, 255, 0));
-        }
-    }
-    std::cout <<"----------------------------------------------------------------" << std::endl;
-    imshow("color_img", color_img);    
-
-
-    cv::waitKey();  
-
+    cv::waitKey();   
     return 0;
 }
 
-
-
-    //주요
-    
+ 

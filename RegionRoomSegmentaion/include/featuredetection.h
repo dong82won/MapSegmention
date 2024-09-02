@@ -14,26 +14,33 @@
 class FeatureDetection
 {
 
-private:
-    /* data */
-    cv::Mat img_;
-    std::vector<cv::Point> &featurePoints_;
-    
-    void mergeClosePoints(std::vector<cv::Point> &points, int distanceThreshold);
-    cv::Point calculateMinimumPointAround(cv::Point featurePoint);
+    private:
+        cv::Mat img_raw_;     
+        cv::Mat img_lsd_;   
+        // cv::Mat img_lsd_;
+        // std::vector<cv::Point> &featurePoints_;
 
-public:
+    public:
+        /* data */
+        FeatureDetection();
+        FeatureDetection(const cv::Mat& img_raw);        
+        
 
-    FeatureDetection(const cv::Mat &img, std::vector<cv::Point> &featurePoints);
-    //FeatureDetection(const cv::Mat &img);
-    ~FeatureDetection();
+        // void mergeClosePoints(std::vector<cv::Point> &points, int distanceThreshold);
+        // cv::Point calculateMinimumPointAround(cv::Point featurePoint);
 
-    void imgShow(std::vector<cv::Point> &updateFeaturePoint);    
-    
-    cv::Mat straightLineDetection();
 
-    void detectEndPoints(const cv::Mat &imgLine, int distanceThreshold);
-    std::vector<cv::Point> updateFeaturePoints();
+        // FeatureDetection();
+        // FeatureDetection(const cv::Mat &img, std::vector<cv::Point> &featurePoints);
+        // //FeatureDetection(const cv::Mat &img);
+        // ~FeatureDetection();
+
+        // void imgShow(std::vector<cv::Point> &updateFeaturePoint);    
+        
+        // void straightLineDetection();
+
+        // void detectEndPoints(const cv::Mat &imgLine, int distanceThreshold);
+        // std::vector<cv::Point> updateFeaturePoints();
 };
 
 
