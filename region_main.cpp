@@ -64,7 +64,6 @@ double euclideanDistance(const cv::Point &p1, const cv::Point &p2)
 {
     return cv::norm(p1 - p2);
 }
- 
 
 void exploreCircleLine(cv::Mat& image, const std::vector<cv::Point>& points, int radius) 
 {
@@ -154,18 +153,6 @@ void exploreBoxLine(cv::Mat& image, const std::vector<cv::Point>& points, int ra
     }
 }
 
-// // 점이 박스 안에 있는지 검사
-// bool isPointInBoundingBox(const cv::Point& point, const std::vector<cv::Rect>& boundingBoxes)
-// {
-//     for (const auto& box : boundingBoxes)
-//     {
-//         if (box.contains(point))
-//         {
-//             return true;
-//         }
-//     }
-//     return false;
-// }
 // 점이 박스 안에 있는지 검사
 bool isPointInBoundingBox(const cv::Point& point, const cv::Rect& box)
 {
@@ -205,6 +192,49 @@ struct RectCompare {
     }
 };
 
+
+Mat floodFillAndDetectNarrowingRegions(const Mat& inputImage) {
+
+    // 시작점 설정 (첫 번째 흰색 픽셀 찾기)
+    Point startPoint(-1, -1);
+    for (int y = 0; y < inputImage.rows; y++) {
+        for (int x = 0; x < inputImage.cols; x++) {
+            if (inputImage.at<uchar>(y, x) == 255) {
+                startPoint = Point(x, y);
+                break;
+            }
+        }
+        if (startPoint.x != -1) break;
+    }
+
+    if (startPoint.x == -1) {
+        cout << "No white areas found." << endl;
+        return Mat();
+    }
+
+    // Flood Fill 수행
+    Mat filledImage = inputImage.clone();
+    floodFill(filledImage, startPoint, Scalar(255));
+
+    // 윤곽선 검출
+    vector<vector<Point>> contours;
+    findContours(filledImage, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+    // 좁아지는 구간 감지
+    Mat resultImage = Mat::zeros(inputImage.size(), CV_8UC1);
+    for (const auto& contour : contours) {
+        
+        double area = contourArea(contour);
+
+        if (area < 100) {  // 필요에 따라 조정
+            drawContours(resultImage, contours, -1, Scalar(255), FILLED);
+        }
+    }
+
+    return resultImage;
+}
+
+
 int main()
 {
     std::string home_path = getenv("HOME");
@@ -221,58 +251,153 @@ int main()
     cv::Mat result_img;
     cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
     cv::Mat result_img2 = result_img.clone();
-
-    // std::vector<cv::Point> featurePoints;
-    // FeatureDetection fd(raw_img, featurePoints);
     
-    FeatureDetection fd;
-    //fd.straightLineDetection();
-
-    //cv::imshow("img_lsd", img_lsd);
+    FeatureDetection fd(raw_img); 
+    fd.straightLineDetection();       
+    
+    // cv::Mat img_lsd = fd.getDetectLine();
+    // imshow("img_lsd", img_lsd);
+    
+    // 병합 픽셀 설정: 9, 12;
+    fd.detectEndPoints(9);
+    //fd.getUpdateFeaturePoints();
+    for (const auto &pt : fd.getUpdateFeaturePoints())
+    {
+        cv::circle(result_img, pt, 3, cv::Scalar(0, 0, 255), -1);
+    }
+    imshow("result_img", result_img);
 
 
 //     //--------------------------------------------------------------------------    
-//     fd.detectEndPoints(img_lsd, 9);
+    cv::Mat img_freeSpace = makeFreeSpace(raw_img);
+// 노이즈 제거를 위한 모폴로지 연산
+    Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
+    Mat opening;
+    morphologyEx(img_freeSpace, opening, MORPH_OPEN, kernel, Point(-1, -1), 2);
 
-//     std::vector<cv::Point> updata_featurePoints = fd.updateFeaturePoints();
-//     //fd.imgShow(updata_featurePoints);
+    // 배경과 전경을 찾기 위해 거리 변환
+    Mat distTransform;
+    distanceTransform(opening, distTransform, DIST_L2, 3);
 
-//     for (const auto &pt : updata_featurePoints)
-//     {
-//         cv::circle(result_img, pt, 3, cv::Scalar(0, 0, 255), -1 );
-//     }
+    // 최대값을 기준으로 이진화
+    double maxVal;
+    minMaxLoc(distTransform, 0, &maxVal);
+    Mat sureForeground;
+    threshold(distTransform, sureForeground, 0.7 * maxVal, 255, THRESH_BINARY);
+    sureForeground.convertTo(sureForeground, CV_8U);
+
+    // 배경 찾기
+    Mat sureBackground = Mat::zeros(img_freeSpace.size(), CV_8U);
+    dilate(opening, sureBackground, kernel, Point(-1, -1), 3);
+
+    // 마스크 생성
+    Mat unknown;
+    subtract(sureBackground, sureForeground, unknown);
+
+    // 레이블링
+    Mat markers = Mat::zeros(img_freeSpace.size(), CV_32S);
+    sureForeground.convertTo(markers, CV_32S);
+    markers = markers + 1; // 전경에 1 추가
+
+    // 배경과 미지의 영역을 구분
+    markers.setTo(0, sureBackground == 0);  // 배경을 0으로 설정
+    markers.setTo(1, sureForeground == 255); // 전경을 1로 설정
+
+    // 워터셰드 알고리즘 적용
+    watershed(img_freeSpace, markers);
+
+    // 경계 표시
+    Mat result;
+    img_freeSpace.copyTo(result);
+    result.setTo(Scalar(0, 0, 255), markers == -1); // 경계에 빨간색 표시
+
+    imshow("Watershed Result", result);
+    waitKey(0);  // 결과를 보기 위해 키 입력 대기
 
 
-//     //--------------------------------------------------------------------------    
-//     cv::Mat img_freeSpace = makeFreeSpace(raw_img);
-//     cv::imshow("img_freeSpace", img_freeSpace);
+    // // 경계 표시
+    // Mat result;
+    // img_freeSpace.copyTo(result);
+    // result.setTo(Scalar(0, 0, 255), markers == -1); // 경계에 빨간색 표시
 
 
-//       // 이진화된 이미지를 반전
-//     Mat invertedImg;
-//     bitwise_not(img_freeSpace, invertedImg);
-//     cv::imshow("invertedImg", invertedImg);
-
-//     // 윤곽선 찾기
-//     vector<vector<Point>> contours;
-//     vector<Vec4i> hierarchy;
-//     findContours(img_freeSpace, contours, hierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
-
-//     cv::Mat color_img_freeSpace;
-//     cv::cvtColor(img_freeSpace, color_img_freeSpace, cv::COLOR_GRAY2RGB);
+    // // 좁아지는 구간 감지
+    // Mat result2 = floodFillAndDetectNarrowingRegions(img_freeSpace);
+    // cv::Mat color_img_freeSpace;
+    // cv::cvtColor(img_freeSpace, color_img_freeSpace, cv::COLOR_GRAY2RGB);
+ 
+    // cv::imshow("img_freeSpace", img_freeSpace);
+    // cv::imshow("result", result2);
+    cv::waitKey();
     
-//     for (size_t i = 0; i < contours.size(); ++i) {
-//         std::cout <<"num: " <<contours[i].size() <<std::endl;
-//         if (contours[i].size() > 10) {
-//             drawContours(color_img_freeSpace, contours, static_cast<int>(i), Scalar(0, 255, 0), 2); 
-//         }
-//     }
-//     cv::imshow("color_img_freeSpace", color_img_freeSpace);
+    
+    //---------------------------------------------------------------------
+    // // 윤곽선 찾기
+    // vector<vector<Point>> contours;
+    // vector<Vec4i> hierarchy;
+    // findContours(img_freeSpace, contours, hierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
+
+    // cv::Mat color_img_freeSpace;
+    // cv::cvtColor(img_freeSpace, color_img_freeSpace, cv::COLOR_GRAY2RGB);
+    
+    // vector<vector<Point>> map_contours;
+    // for (size_t i = 0; i < contours.size(); ++i) 
+    // {
+    //     //std::cout <<"num: " <<contours[i].size() <<std::endl; 
+    //     if (contours[i].size() > 10) 
+    //     {
+    //         drawContours(img_freeSpace, contours, static_cast<int>(i), Scalar(128), 1);
+    //     }
+    // }
+
+    //     // 결과 외곽선을 vector<Point>에 저장
+    // vector<Point> result_contour; 
+    // // 그린 외곽선의 좌표를 추출하여 저장
+    // for (int y = 0; y < img_freeSpace.rows; y++) {
+    //     for (int x = 0; x < img_freeSpace.cols; x++) {
+    //         uchar pixel = img_freeSpace.at<uchar>(y, x);
+    //         // 만약 픽셀이 초록색 (0, 255, 0)이라면
+    //         if (pixel == 128) {
+    //             result_contour.push_back(Point(x, y));
+    //         }
+    //     }
+    // }
+
+    // //Mat temp_img = Mat::zeros(img_freeSpace.size(), CV_8UC1);
+    // Mat temp_img(img_freeSpace.size(), CV_8UC1, Scalar(255));
+
+    // for (const auto& pt : result_contour) {
+    //     circle(temp_img, pt, 1, Scalar(0), -1);
+    // }
+    // cv::imshow("temp_img", temp_img);
+
+    //---------------------------------------------------------------------
+
+    //std::vector<cv::Point> sort_map_contours = sortPoints(map_contours);
+
+    // for (const auto &pt : map_contours)
+    // {
+    //     cv::circle(color_img_freeSpace, pt, 1, CV_RGB(0, 255, 0), -1);
+    // }
+
+    // for (size_t i = 0; i < map_contours.size(); ++i) 
+    // {
+    //     for (size_t j = 0; j < map_contours[i].size()-1; ++j)
+    //     {
+    //         Point pt1 = map_contours[i][j];
+    //         Point pt2 = map_contours[i][j+1];
+    //         line(color_img_freeSpace, pt1, pt2, Scalar(0, 255, 0), 2);
+    //     }
+    // }
+
+
+
+    //cv::imshow("color_img_freeSpace", color_img_freeSpace);
 
 
 
 
-
+//------------------------------------------------------------------------------
 
 //     TrajectionPoint tp;
 //     cv::Mat img_dist= tp.makeDistanceTransform(img_freeSpace);
@@ -347,7 +472,7 @@ int main()
 //     cv::imshow("result_img2", result_img2);  
 //     cv::imshow("result_img", result_img);    
     
-    cv::waitKey();   
+    
     return 0;
 }
 

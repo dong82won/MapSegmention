@@ -7,7 +7,7 @@
 #include <iostream>
 #include <random>
 #include <cmath>
-
+#include <vector>
 
 #include "lsd.h"
 
@@ -18,29 +18,24 @@ class FeatureDetection
         cv::Mat img_raw_;     
         cv::Mat img_lsd_;   
         // cv::Mat img_lsd_;
-        // std::vector<cv::Point> &featurePoints_;
+        std::vector<cv::Point> featurePoints_;
+        std::vector<cv::Point> upddateFeaturePoints_;
+
+        void mergeClosePoints(std::vector<cv::Point> &points, int distanceThreshold);
+        cv::Point calculateMinimumPointAround(cv::Point featurePoint);
 
     public:
         /* data */
         FeatureDetection();
         FeatureDetection(const cv::Mat& img_raw);        
+        ~FeatureDetection();
         
-
-        // void mergeClosePoints(std::vector<cv::Point> &points, int distanceThreshold);
-        // cv::Point calculateMinimumPointAround(cv::Point featurePoint);
-
-
-        // FeatureDetection();
-        // FeatureDetection(const cv::Mat &img, std::vector<cv::Point> &featurePoints);
-        // //FeatureDetection(const cv::Mat &img);
-        // ~FeatureDetection();
-
-        // void imgShow(std::vector<cv::Point> &updateFeaturePoint);    
         
-        // void straightLineDetection();
+        void straightLineDetection();
+        void detectEndPoints(int distanceThreshold);
 
-        // void detectEndPoints(const cv::Mat &imgLine, int distanceThreshold);
-        // std::vector<cv::Point> updateFeaturePoints();
+        std::vector<cv::Point> getUpdateFeaturePoints();
+        cv::Mat getDetectLine();
 };
 
 
