@@ -5,8 +5,9 @@
 #include <random>
 #include <cmath>
 #include <stack>
+#include <algorithm>
 
-//#include "lsd.h"
+// #include "lsd.h"
 #include "featuredetection.h"
 #include "trajectioryPoint.h"
 
@@ -29,30 +30,20 @@ cv::Mat makeFreeSpace(cv::Mat &src)
 
     cv::Mat dst = cv::Mat::zeros(rows, cols, CV_8UC1);
 
-    for (int i=0; i<rows; i++)
+    for (int i = 0; i < rows; i++)
     {
-        for (int j=0; j<cols; j++)
+        for (int j = 0; j < cols; j++)
         {
             uchar pixelValue = src.at<uchar>(i, j);
-            if (pixelValue > 128) {
-            //if (pixelValue > 205) {
+            if (pixelValue > 128)
+            {
+                // if (pixelValue > 205) {
                 dst.at<uchar>(i, j) = 255;
             }
         }
     }
     return dst;
 }
-
-
-// 커스텀 비교 함수
-struct PointCompare {
-    bool operator()(const Point& lhs, const Point& rhs) const {
-        if (lhs.x == rhs.x) {
-            return lhs.y < rhs.y;
-        }
-        return lhs.x < rhs.x;
-    }
-};
 
 // 거리 계산 함수
 double calculateDistance(const Point &p1, const Point &p2)
@@ -65,92 +56,106 @@ double euclideanDistance(const cv::Point &p1, const cv::Point &p2)
     return cv::norm(p1 - p2);
 }
 
-void exploreCircleLine(cv::Mat& image, const std::vector<cv::Point>& points, int radius) 
+// 거리 내의 점들을 병합하는 함수
+void mergeClosePoints(std::vector<cv::Point> &points, int distanceThreshold)
 {
-    if (points.empty()) return;
+    std::vector<cv::Point> mergedPoints;
 
-    // 원의 지름 계산
-    int diameter = 1.5* radius;
-
-    // 첫 번째 점에서 원을 그림
-    cv::Point prevPoint = points[0];
-    //cv::circle(image, prevPoint, radius, CV_RGB(0, 255, 0), 1);
-
-    for (size_t i = 1; i < points.size(); i++) 
+    while (!points.empty())
     {
-        cv::Point currentPoint = points[i];
+        cv::Point basePoint = points.back();
+        points.pop_back();
 
-        // 이전 점과 현재 점 사이의 거리 계산
-        double distance = cv::norm(currentPoint - prevPoint);
+        std::vector<cv::Point> closePoints;
+        closePoints.push_back(basePoint);
 
-        // 거리가 반지름 두 배보다 크거나 같을 때만 원을 그림
-        if (distance >= diameter) 
+        for (auto it = points.begin(); it != points.end();)
         {
-            // 원을 그리는 위치 계산
-            cv::circle(image, currentPoint, radius, CV_RGB(0, 255, 0), 1);
-            
-            // 반경 내의 모든 점을 탐색
-            for (int y = -radius; y <= radius; ++y)
+            if (cv::norm(basePoint - *it) <= distanceThreshold)
             {
-                for (int x = -radius; x <= radius; ++x)
+                closePoints.push_back(*it);
+                it = points.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        // 평균 위치를 계산하여 병합된 점을 추가
+        cv::Point avgPoint(0, 0);
+        for (const auto &pt : closePoints)
+        {
+            avgPoint += pt;
+        }
+        avgPoint.x /= closePoints.size();
+        avgPoint.y /= closePoints.size();
+        mergedPoints.push_back(avgPoint);
+    }
+
+    points = mergedPoints;
+}
+
+// End-points를 감지하고 그 좌표를 vector에 저장
+void detectEndPoints(const cv::Mat &skeleton, std::vector<cv::Point> &endPoints)
+{
+    for (int y = 1; y < skeleton.rows - 1; ++y)
+    {
+        for (int x = 1; x < skeleton.cols - 1; ++x)
+        {
+            if (skeleton.at<uchar>(y, x) == 255)
+            {
+                int count = 0;
+
+                // 8방향 이웃 확인
+                count += skeleton.at<uchar>(y - 1, x - 1) == 255 ? 1 : 0;
+                count += skeleton.at<uchar>(y - 1, x) == 255 ? 1 : 0;
+                count += skeleton.at<uchar>(y - 1, x + 1) == 255 ? 1 : 0;
+                count += skeleton.at<uchar>(y, x + 1) == 255 ? 1 : 0;
+                count += skeleton.at<uchar>(y + 1, x + 1) == 255 ? 1 : 0;
+                count += skeleton.at<uchar>(y + 1, x) == 255 ? 1 : 0;
+                count += skeleton.at<uchar>(y + 1, x - 1) == 255 ? 1 : 0;
+                count += skeleton.at<uchar>(y, x - 1) == 255 ? 1 : 0;
+
+                // End-point는 이웃이 하나만 있는 픽셀
+                if (count == 1)
                 {
-                    // 현재 점이 원의 내부에 있는지 확인
-                    if (x * x + y * y <= radius * radius) {
-                        // 원의 내부에 있는 점에서 수행할 작업
-                        cv::Point pointInCircle = currentPoint + cv::Point(x, y);
-                        if (pointInCircle.x >= 0 && pointInCircle.x < image.cols &&
-                            pointInCircle.y >= 0 && pointInCircle.y < image.rows)
-                        {
-                            // 이미지 범위를 벗어나지 않는 점에 대해서만 처리
-                            image.at<cv::Vec3b>(pointInCircle) = cv::Vec3b(0, 0, 255); // 빨간색으로 점 찍기
-                        }
-                    }
+                    endPoints.push_back(cv::Point(x, y));
                 }
             }
-            prevPoint = currentPoint;  // 이전 점을 업데이트
         }
     }
+
+    // 교차점 병합
+    mergeClosePoints(endPoints, 12); // 3 픽셀 이내의 점을 병합
 }
 
 
-void exploreBoxLine(cv::Mat& image, const std::vector<cv::Point>& points, int radius, 
-                    std::vector<cv::Rect>& boundingBoxes) 
-{
-    if (points.empty()) return;
+// 두 원형 영역이 겹치는지 확인하는 함수
+bool isOverlap(const Point& center1, int radius1, const Point& center2, int radius2) {
+    double distance = sqrt(pow(center1.x - center2.x, 2) + pow(center1.y - center2.y, 2));
+    return distance < (radius1 + radius2);
+}
 
-    // 첫 번째 점에서 박스를 그림
-    cv::Point prevPoint = points[0];
-    cv::Rect initialBox(prevPoint.x - radius, prevPoint.y - radius, 2 * radius, 2 * radius);
-    cv::rectangle(image, initialBox, CV_RGB(0, 255, 0), 1);    
+// 두 원형 영역이 반만 겹치는지 확인하는 함수
+bool isHalfOverlap(const Point& center1, int radius1, const Point& center2, int radius2) {
+    double distance = sqrt(pow(center1.x - center2.x, 2) + pow(center1.y - center2.y, 2));
+    return distance <= (radius1 + radius2) / 2.0;
+}
+
+
+// 주어진 중심과 반지름을 기반으로 원의 경계 점을 찾는 함수
+vector<Point> edgePointsInCircle(const Point& center, int radius) {
+    vector<Point> points;
     
-    cv::Point center(initialBox.x + initialBox.width / 2, initialBox.y + initialBox.height / 2);
-    circle(image, center, 3, Scalar(255, 255, 0), -1); // 빨간색 점
-
-    boundingBoxes.push_back(initialBox); // 박스 저장
-
-    for (size_t i = 1; i < points.size(); i+=radius) 
-    {
-        cv::Point currentPoint = points[i];
-
-        // 이전 점과 현재 점 사이의 거리 계산
-        double distance = cv::norm(currentPoint - prevPoint);
-
-        // 거리가 반지름 두 배보다 크거나 같을 때만 박스를 그림
-        if (distance >= 1.5 * radius) 
-        {
-            // 박스의 좌측 상단 점과 우측 하단 점 계산
-            cv::Rect box(currentPoint.x - radius, currentPoint.y - radius, 2 * radius, 2 * radius);
-            cv::rectangle(image, box, CV_RGB(0, 255, 0), 1);
-            // 박스의 중심점 계산
-            cv::Point center(box.x + box.width / 2, box.y + box.height / 2);
-            // 중심점 표시
-            circle(image, center, 3,  Scalar(255, 255, 0), -1); // 빨간색 점
-
-            boundingBoxes.push_back(box); // 박스 저장            
-            
-            prevPoint = currentPoint;  // 이전 점을 업데이트
-        }
+    // 원의 경계에서 점들을 추출
+    for (double angle = 0; angle < 2 * CV_PI; angle += 0.1) { // 각도를 0.1씩 증가시켜 점을 추출
+        int x = static_cast<int>(center.x + radius * cos(angle));
+        int y = static_cast<int>(center.y + radius * sin(angle));
+        points.push_back(Point(x, y));
     }
+    
+    return points;
 }
 
 // 점이 박스 안에 있는지 검사
@@ -183,14 +188,16 @@ std::vector<cv::Point> sortPoints(const std::vector<cv::Point>& points) {
     return sortedPoints;
 } 
 
+
+
 int main()
 {
     std::string home_path = getenv("HOME");
-    //std::cout << home_path << std::endl;
-    
+    // std::cout << home_path << std::endl;
+
     // 이미지 파일 경로
-    cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
-    //cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
+    cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+    // cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
     if (raw_img.empty())
     {
         std::cerr << "Error: Unable to open image file: " << std::endl;
@@ -199,24 +206,20 @@ int main()
     cv::Mat result_img;
     cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
     cv::Mat result_img2 = result_img.clone();
-    
-    FeatureDetection fd(raw_img); 
-    fd.straightLineDetection();       
-    
-    // cv::Mat img_lsd = fd.getDetectLine();
-    // imshow("img_lsd", img_lsd);
-    
+
+    FeatureDetection fd(raw_img);
+    fd.straightLineDetection();
+
     // 병합 픽셀 설정: 9, 12;
     fd.detectEndPoints(9);
-    //fd.getUpdateFeaturePoints();
+    // fd.getUpdateFeaturePoints();
+
     for (const auto &pt : fd.getUpdateFeaturePoints())
     {
         cv::circle(result_img, pt, 3, cv::Scalar(0, 0, 255), -1);
     }
     imshow("result_img", result_img);
 
-
-//     //--------------------------------------------------------------------------    
     cv::Mat img_freeSpace = makeFreeSpace(raw_img);
     imshow("img_freeSpace", img_freeSpace);
 
