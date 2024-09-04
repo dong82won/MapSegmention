@@ -75,11 +75,16 @@ void drawRectanglesAlongLine(cv::Mat& image, const std::vector<cv::Point>& point
     for (size_t i = 0; i < points.size(); i+=10) {
         // 현재 점에서의 방향 벡터 계산
         cv::Point direction;
-
-        if (i < points.size() - 1) {
+        
+        // 첫 번째 점: 다음 점을 기준으로 방향 계산
+        if (i == 0) {
             direction = points[i + 1] - points[i];
-        } else if (i > 0) {
-            direction = points[i] - points[i - 1];
+        }        
+        // 그 외의 경우: 이전 점과 다음 점의 중간 방향 벡터 계산
+        else {
+            cv::Point dirPrev = points[i] - points[i - 1];
+            cv::Point dirNext = points[i + 1] - points[i];
+            direction = dirPrev + dirNext; // 두 벡터를 더해 중간 방향 계산
         }
 
 
@@ -101,15 +106,22 @@ void drawRectanglesAlongLine(cv::Mat& image, const std::vector<cv::Point>& point
         // std::vector<cv::Point> boxPoints = { p1, p2, p3, p4, p1 };  // 마지막 점을 추가하여 박스 닫기
         // cv::polylines(image, boxPoints, false, cv::Scalar(0, 0, 255), 1);
 
-               // 박스의 좌측 상단과 우측 하단 모서리 점 계산
+        cv::Mat test(image.size(), CV_8UC3, CV_RGB(0, 0, 0));
+
+
+        // 박스의 좌측 상단과 우측 하단 모서리 점 계산
         cv::Point topLeft = cv::Point(std::min({p1.x, p2.x, p3.x, p4.x}), std::min({p1.y, p2.y, p3.y, p4.y}));
         cv::Point bottomRight = cv::Point(std::max({p1.x, p2.x, p3.x, p4.x}), std::max({p1.y, p2.y, p3.y, p4.y}));
-        
+
         cv::Rect box(topLeft, bottomRight);
         cv::Point center_box = (topLeft + bottomRight) * 0.5;
         // 박스를 그리기
-        //cv::rectangle(image, box, cv::Scalar(255, 0, 0), 1);
-        cv::circle(image, center_box, 3, CV_RGB(0, 255, 0), -1);
+        cv::rectangle(test, box, cv::Scalar(255, 0, 0), 1);
+        cv::circle(test, center_box, 3, CV_RGB(0, 255, 0), -1);
+
+        cv::imshow("test", test);
+        cv::waitKey(0);
+
     }
 }
 
@@ -142,8 +154,8 @@ int main()
     //std::cout << home_path << std::endl;
     
     // 이미지 파일 경로
-    cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
-    //cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
+    cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+    //cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
     if (raw_img.empty())
     {
         std::cerr << "Error: Unable to open image file: " << std::endl;
@@ -181,22 +193,20 @@ int main()
 
     cv::Mat test(img_skeletion.size(), CV_8UC3, CV_RGB(0, 0, 0));
     
-    //for (const auto &pt : sort_trajector_line)
+    for (const auto &pt : sort_trajector_line)
     for (size_t i =0; i< sort_trajector_line.size(); i+=10)
     {
         cv::Point pt = sort_trajector_line[i];
-        cv::circle(test, pt, 1, cv::Scalar(255, 255, 255), -1 );        
-        cv::imshow("test", test);      
-        cv::waitKey(0);
+        cv::circle(test, pt, 1, cv::Scalar(255, 255, 255), -1 );            
+        cv::imshow("test", test);
+        cv::waitKey();
     }
-         
+    
     //drawRectanglesAlongLine(test, sort_trajector_line, 10, 30);
-
 
     // for (const auto &pt : sort_trajector_line)
     // {
-    //     cv::circle(test, pt, 1, cv::Scalar(255, 255, 255), -1 );        
-        
+    //     cv::circle(test, pt, 1, cv::Scalar(255, 0, 0), -1);
     // }
     
 
