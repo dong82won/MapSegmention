@@ -158,10 +158,29 @@ vector<Point> edgePointsInCircle(const Point& center, int radius) {
     return points;
 }
 
-// 점이 박스 안에 있는지 검사
-bool isPointInBoundingBox(const cv::Point& point, const cv::Rect& box)
-{
-    return box.contains(point);
+
+// 원형 탐색 범위를 추가하는 함수
+vector<Point> addNonOverlappingCircles(const vector<Point>& data, int radius) {
+    vector<Point> circlesCenters;
+    
+    for (const auto& point : data) {
+        bool overlap = false;
+        
+        // 새로 추가할 원형 범위가 기존의 범위와 겹치는지 확인
+        for (const auto& existingCenter : circlesCenters) {
+            //if (isOverlap(existingCenter, radius, point, radius)) {
+            if (isHalfOverlap(existingCenter, radius, point, radius)) {
+                overlap = true;
+                break;
+            }
+        }
+        
+        if (!overlap) {
+            circlesCenters.push_back(point);
+        }
+    }
+    
+    return circlesCenters;
 }
 
 
@@ -190,76 +209,80 @@ std::vector<cv::Point> sortPoints(const std::vector<cv::Point>& points) {
 
 
 
-int main()
-{
+int main() {
     std::string home_path = getenv("HOME");
     // std::cout << home_path << std::endl;
 
-    // 이미지 파일 경로
-    cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
-    // cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
-    if (raw_img.empty())
-    {
-        std::cerr << "Error: Unable to open image file: " << std::endl;
-        return -1;
-    }
-    cv::Mat result_img;
-    cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
-    cv::Mat result_img2 = result_img.clone();
+//     // 이미지 파일 경로
+//     cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+//     // cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
+//     if (raw_img.empty())
+//     {
+//         std::cerr << "Error: Unable to open image file: " << std::endl;
+//         return -1;
+//     }
+//     cv::Mat result_img;
+//     cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
+//     cv::Mat result_img2 = result_img.clone();
 
-    FeatureDetection fd(raw_img);
-    fd.straightLineDetection();
+// //     FeatureDetection fd(raw_img);
+// //     fd.straightLineDetection();
 
-    // 병합 픽셀 설정: 9, 12;
-    fd.detectEndPoints(9);
-    // fd.getUpdateFeaturePoints();
+// //     // 병합 픽셀 설정: 9, 12;
+// //     fd.detectEndPoints(9);
+// //     // fd.getUpdateFeaturePoints();
 
-    for (const auto &pt : fd.getUpdateFeaturePoints())
-    {
-        cv::circle(result_img, pt, 3, cv::Scalar(0, 0, 255), -1);
-    }
+// //     for (const auto &pt : fd.getUpdateFeaturePoints())
+// //     {
+// //         cv::circle(result_img, pt, 3, cv::Scalar(0, 0, 255), -1);
+// //     }
     
 
-    cv::Mat img_freeSpace = makeFreeSpace(raw_img);
-    imshow("img_freeSpace", img_freeSpace);
+//     cv::Mat img_freeSpace = makeFreeSpace(raw_img);
+//     imshow("img_freeSpace", img_freeSpace);
 
         
-    // 윤곽선 찾기
-    vector<vector<Point>> contours;
-    vector<Vec4i> hierarchy;
-    findContours(img_freeSpace, contours, hierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
+//     // 윤곽선 찾기
+//     vector<vector<Point>> contours;
+//     vector<Vec4i> hierarchy;
+//     findContours(img_freeSpace, contours, hierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
 
-    // 컨투어 검출
-    findContours(img_freeSpace, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
+//     // 컨투어 검출
+//     findContours(img_freeSpace, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
 
-    // 검출된 컨투어를 원본 이미지에 그리기
-    Mat drawing_contours = Mat::zeros(img_freeSpace.size(), CV_8UC1);    
-    for (size_t i = 0; i < contours.size(); i++)
-    {
-        // cout << "contours.size(): "<< contours[i].size() << endl;
-        if (contours[i].size() > 15)
-            drawContours(drawing_contours, contours, (int)i, Scalar(255), 1);
-    }
-    imshow("drawing_contours", drawing_contours);
-
-
-    vector<Point> contour;
-    for (int i = 0; i < drawing_contours.rows; i++)
-    {
-        for (int j= 0; j < drawing_contours.cols; j++)
-        {
-            if (drawing_contours.at<uchar>(i, j) == 255) 
-                contour.push_back(Point(j, i));
-        }
-    }
+//     // 검출된 컨투어를 원본 이미지에 그리기
+//     Mat drawing_contours = Mat::zeros(img_freeSpace.size(), CV_8UC1);    
+//     for (size_t i = 0; i < contours.size(); i++)
+//     {
+//         // cout << "contours.size(): "<< contours[i].size() << endl;
+//         if (contours[i].size() > 15)
+//             drawContours(drawing_contours, contours, (int)i, Scalar(255), 1);
+//     }
+//     imshow("drawing_contours", drawing_contours);
 
 
-    for (const auto &pt : contour)
-    {
-        cv::circle(result_img, pt, 3, cv::Scalar(0, 255, 0), -1);
-        imshow("result_img", result_img);
-        waitKey();
-    }
+//     vector<Point> contour;
+//     for (int i = 0; i < drawing_contours.rows; i++)
+//     {
+//         for (int j= 0; j < drawing_contours.cols; j++)
+//         {
+//             if (drawing_contours.at<uchar>(i, j) == 255) 
+//                 contour.push_back(Point(j, i));
+//         }
+//     }
+
+
+//     for (const auto &pt : contour)
+//     {
+//         cv::circle(result_img, pt, 3, cv::Scalar(0, 255, 0), -1);        
+//     }
+//     imshow("result_img", result_img);
+    
+
+
+
+
+
 
 
 
@@ -290,13 +313,14 @@ int main()
     // cv::imshow("img_skeletion", img_skeletion);      
 
 
-     Mat image = Mat::zeros(500, 500, CV_8UC3);
+    Mat image = Mat::zeros(500, 500, CV_8UC3);
 
     // 데이터로 사용할 점들 설정
     vector<Point> data = {
         Point(100, 100), Point(110, 110), Point(120, 120), 
         Point(130, 130), Point(140, 140), Point(150, 150)
     };
+
     int radius = 25; // 탐색 범위 반지름
 
     // 원형 탐색 범위가 겹치지 않도록 점들을 추가
@@ -320,8 +344,16 @@ int main()
             line(image, start, end, Scalar(255, 0, 0), 1); // 파란색으로 실선 그리기
         }
     }
-    imshow("img_freeSpace2", img_freeSpace);
+
+    // 데이터 포인트를 이미지에 표시
+    for (const auto& point : data) {
+        circle(image, point, 3, Scalar(0, 0, 255), -1); // 빨간색 점 표시
+    }
+
+    imshow("image", image);
     waitKey();
+
+
     return 0;
 }
 
