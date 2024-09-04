@@ -265,7 +265,7 @@ int main()
     // cv::imshow("img_skeletion", img_skeletion);      
 
 
-     Mat image = Mat::zeros(500, 500, CV_8UC3);
+    Mat image = Mat::zeros(500, 500, CV_8UC3);
 
     // 데이터로 사용할 점들 설정
     vector<Point> data = {
