@@ -191,7 +191,7 @@ int main()
     // std::cout << home_path << std::endl;
 
     // 이미지 파일 경로
-    cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+    cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
     // cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
     if (raw_img.empty())
     {
@@ -213,7 +213,7 @@ int main()
     {
         cv::circle(result_img, pt, 3, cv::Scalar(0, 0, 255), -1);
     }
-    imshow("result_img", result_img);
+    
 
     cv::Mat img_freeSpace = makeFreeSpace(raw_img);
     cv::imshow("img_freeSpace", img_freeSpace);
@@ -226,32 +226,50 @@ int main()
     findContours(img_freeSpace, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
 
     // 검출된 컨투어를 원본 이미지에 그리기
-    Mat drawing = Mat::zeros(img_freeSpace.size(), CV_8UC1);
-
-    vector<Point> result_contour;
+    Mat drawing_contours = Mat::zeros(img_freeSpace.size(), CV_8UC1);    
     for (size_t i = 0; i < contours.size(); i++)
     {
         // cout << "contours.size(): "<< contours[i].size() << endl;
         if (contours[i].size() > 15)
-            drawContours(drawing, contours, (int)i, Scalar(255), 1);
+            drawContours(drawing_contours, contours, (int)i, Scalar(255), 1);
+    }
+    imshow("drawing_contours", drawing_contours);
+
+
+    vector<Point> contour;
+    for (int i = 0; i < drawing_contours.rows; i++)
+    {
+        for (int j= 0; j < drawing_contours.cols; j++)
+        {
+            if (drawing_contours.at<uchar>(i, j) == 255) 
+                contour.push_back(Point(j, i));
+        }
     }
 
-    imshow("Drawing_Contours", drawing);
 
-    // cv::circle(result_img, seedPoint, 3, cv::Scalar(255, 255, 0), -1);
-    // detectEndPoints(drawing, result_contour);
+    for (const auto &pt : contour)
+    {
+        cv::circle(result_img, pt, 3, cv::Scalar(0, 255, 0), -1);
+        imshow("result_img", result_img);
+        waitKey();
+    }
+
+
+
+    // // cv::circle(result_img, seedPoint, 3, cv::Scalar(255, 255, 0), -1);
+    // // detectEndPoints(drawing, result_contour);
 
     // for (const auto &pt : result_contour)
     // {
     //     cv::circle(result_img, pt, 3, cv::Scalar(0, 255, 0), -1);
     // }
-    // imshow("result_img2", result_img);
+    // imshow("test", result_img);
 
-    // 다각형 채우기
-    floodFill(drawing, Point(img_freeSpace.cols / 2, img_freeSpace.rows / 2), Scalar(255));
+    // // 다각형 채우기
+    // floodFill(drawing, Point(img_freeSpace.cols / 2, img_freeSpace.rows / 2), Scalar(255));
 
-    // 결과 이미지 출력
-    imshow("Drawing_Region", drawing);
+    // // 결과 이미지 출력
+    // imshow("Drawing_Region", drawing);
 
 
 
