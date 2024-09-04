@@ -1,7 +1,18 @@
 #include "featuredetection.h"
 
-FeatureDetection::FeatureDetection(const cv::Mat &img, std::vector<cv::Point> &featurePoints) 
-                                   :img_(img), featurePoints_(featurePoints)
+// FeatureDetection::FeatureDetection(const cv::Mat &img, std::vector<cv::Point> &featurePoints) 
+//                                    :img_(img), featurePoints_(featurePoints)
+// //FeatureDetection::FeatureDetection(const cv::Mat &img):img_(img)
+// {
+// }
+
+
+FeatureDetection::FeatureDetection() 
+{    
+}
+
+FeatureDetection::FeatureDetection(const cv::Mat &img_raw) : img_raw_(img_raw)
+//FeatureDetection::FeatureDetection(const cv::Mat& img) : img_(img) 
 //FeatureDetection::FeatureDetection(const cv::Mat &img):img_(img)
 {
 }
@@ -10,25 +21,32 @@ FeatureDetection::~FeatureDetection()
 {
 }
 
-void FeatureDetection::imgShow(std::vector<cv::Point> &updateFeaturePoint)
-{
-    cv::Mat img_color;
-    cv::cvtColor(img_, img_color, cv::COLOR_GRAY2BGR);
+// void FeatureDetection::imgShow(std::vector<cv::Point> &updateFeaturePoint)
+// {
+//     cv::Mat img_color;
+//     cv::cvtColor(img_raw_, img_color, cv::COLOR_GRAY2BGR);
 
-    for (const auto &pt :  updateFeaturePoint)
-    {
-        cv::circle(img_color, pt, 3, CV_RGB(255, 0, 0), -1);
-    }
+//     for (const auto &pt :  updateFeaturePoint)
+//     {
+//         cv::circle(img_color, pt, 3, CV_RGB(255, 0, 0), -1);
+//     }
     
-    cv::imshow("result_featurePoints", img_color);
-    cv::waitKey(0);
+//     cv::imshow("result_featurePoints", img_color);
+//     cv::waitKey(0);
+// }
+
+
+cv::Mat FeatureDetection::getDetectLine()
+{
+    return img_lsd_;
 }
 
-cv::Mat FeatureDetection::straightLineDetection()
+
+void FeatureDetection::straightLineDetection()
 {
 
     cv::Mat src_gray;
-    img_.convertTo(src_gray, CV_64FC1);
+    img_raw_.convertTo(src_gray, CV_64FC1);
 
     int cols = src_gray.cols;
     int rows = src_gray.rows;
@@ -37,7 +55,9 @@ cv::Mat FeatureDetection::straightLineDetection()
     image->data = src_gray.ptr<double>(0);
 
     ntuple_list ntl = lsd(image);
-    cv::Mat lsd = cv::Mat::zeros(rows, cols, CV_8UC1);
+
+    //cv::Mat lsd = cv::Mat::zeros(rows, cols, CV_8UC1);
+    img_lsd_= cv::Mat::zeros(rows, cols, CV_8UC1);
     cv::Point pt1, pt2;
     for (int j = 0; j != ntl->size; ++j)
     {
@@ -47,11 +67,9 @@ cv::Mat FeatureDetection::straightLineDetection()
         pt2.y = ntl->values[3 + j * ntl->dim];
 
         double width = ntl->values[4 + j * ntl->dim];
-        cv::line(lsd, pt1, pt2, cv::Scalar(255), 1, cv::LINE_8);
+        cv::line(img_lsd_, pt1, pt2, cv::Scalar(255), 1, cv::LINE_8);
     }
-    free_ntuple_list(ntl);
-
-    return lsd;
+    free_ntuple_list(ntl); 
 }
 
 //--------------------------------------------------------------------------------
@@ -96,25 +114,25 @@ void FeatureDetection::mergeClosePoints(std::vector<cv::Point> &points, int dist
 }
 //--------------------------------------------------------------------------------
 // End-points를 감지하고 그 좌표를 vector에 저장
-void FeatureDetection::detectEndPoints(const cv::Mat &imgLine, int distanceThreshold)
+void FeatureDetection::detectEndPoints(int distanceThreshold)
 {
-    for (int y = 1; y < imgLine.rows - 1; ++y)
+    for (int y = 1; y < img_lsd_.rows - 1; ++y)
     {
-        for (int x = 1; x < imgLine.cols - 1; ++x)
+        for (int x = 1; x < img_lsd_.cols - 1; ++x)
         {
-            if (imgLine.at<uchar>(y, x) == 255)
+            if (img_lsd_.at<uchar>(y, x) == 255)
             {
                 int count = 0;
 
                 // 8방향 이웃 확인
-                count += imgLine.at<uchar>(y - 1, x - 1) == 255 ? 1 : 0;
-                count += imgLine.at<uchar>(y - 1, x) == 255 ? 1 : 0;
-                count += imgLine.at<uchar>(y - 1, x + 1) == 255 ? 1 : 0;
-                count += imgLine.at<uchar>(y, x + 1) == 255 ? 1 : 0;
-                count += imgLine.at<uchar>(y + 1, x + 1) == 255 ? 1 : 0;
-                count += imgLine.at<uchar>(y + 1, x) == 255 ? 1 : 0;
-                count += imgLine.at<uchar>(y + 1, x - 1) == 255 ? 1 : 0;
-                count += imgLine.at<uchar>(y, x - 1) == 255 ? 1 : 0;
+                count += img_lsd_.at<uchar>(y - 1, x - 1) == 255 ? 1 : 0;
+                count += img_lsd_.at<uchar>(y - 1, x) == 255 ? 1 : 0;
+                count += img_lsd_.at<uchar>(y - 1, x + 1) == 255 ? 1 : 0;
+                count += img_lsd_.at<uchar>(y, x + 1) == 255 ? 1 : 0;
+                count += img_lsd_.at<uchar>(y + 1, x + 1) == 255 ? 1 : 0;
+                count += img_lsd_.at<uchar>(y + 1, x) == 255 ? 1 : 0;
+                count += img_lsd_.at<uchar>(y + 1, x - 1) == 255 ? 1 : 0;
+                count += img_lsd_.at<uchar>(y, x - 1) == 255 ? 1 : 0;
 
                 // End-point는 이웃이 하나만 있는 픽셀
                 if (count == 1)
@@ -126,7 +144,7 @@ void FeatureDetection::detectEndPoints(const cv::Mat &imgLine, int distanceThres
     }
 
     // 교차점 병합
-    mergeClosePoints(featurePoints_, 12); // 3 픽셀 이내의 점을 병합
+    mergeClosePoints(featurePoints_, distanceThreshold); 
 }
 
 //--------------------------------------------------------------------------------
@@ -150,15 +168,15 @@ cv::Point FeatureDetection::calculateMinimumPointAround(cv::Point pt)
             int ny = pt.y + j;
 
             // 이미지 경계 체크
-            if (nx >= 0 && ny >= 0 && nx < img_.cols && ny < img_.rows)
+            if (nx >= 0 && ny >= 0 && nx < img_raw_.cols && ny < img_raw_.rows)
             {
-                double currentValue = static_cast<double>(img_.at<uchar>(ny, nx));
+                double currentValue = static_cast<double>(img_raw_.at<uchar>(ny, nx));
                 if (currentValue < minValue)
                 {
                     minValue = currentValue;
                     minPoint = cv::Point(nx, ny);
 
-                    sum += img_.at<uchar>(ny, nx); // 픽셀 값 누적
+                    sum += img_raw_.at<uchar>(ny, nx); // 픽셀 값 누적
                     count++;
                 }
             }
@@ -176,27 +194,25 @@ cv::Point FeatureDetection::calculateMinimumPointAround(cv::Point pt)
 
 //--------------------------------------------------------------------------------
 // 최소값을 가진 픽셀의 위치를 계산하는 함수
-std::vector<cv::Point> FeatureDetection::updateFeaturePoints()
+std::vector<cv::Point> FeatureDetection::getUpdateFeaturePoints()
 {
-    std::vector<cv::Point> result_points;
-
     for (const auto &pt : featurePoints_)
     {
         // cv::circle(color_raw_img1, pt, 3, cv::Scalar(0, 0, 255), -1);
-        int pixelValue = img_.at<uchar>(pt.y, pt.x);        
+        int pixelValue = img_raw_.at<uchar>(pt.y, pt.x);        
 
         cv::Point min_Point = calculateMinimumPointAround(pt);
         
-        int min_pixelValue = img_.at<uchar>(min_Point.y, min_Point.x);
+        int min_pixelValue = img_raw_.at<uchar>(min_Point.y, min_Point.x);
         
         // std::cout << "org. : " << pt << ", mP: " << min_Point << std::endl;
         // std::cout << "pixelValue: " << pixelValue << ", min_pixelValue: " << min_pixelValue << std::endl;
 
-        if (min_pixelValue < 20)
+        if (min_pixelValue < 10)
         {
             //cv::circle(result_img, pt, 3, CV_RGB(255, 0, 0), -1);
-            result_points.push_back(pt);
+            upddateFeaturePoints_.push_back(pt);
         }
     }
-    return result_points;
+    return upddateFeaturePoints_;
 }
