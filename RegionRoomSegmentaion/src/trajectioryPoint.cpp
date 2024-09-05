@@ -27,8 +27,8 @@ cv::Mat TrajectionPoint::makeDistanceTransform(cv::Mat freeSpace)
     cv::Mat dist_transform_8u;
     // 전경 이미지를 8비트로 변환
     dist_transform.convertTo(dist_transform_8u, CV_8UC1);
-    cv::imshow("distTransform", dist_transform_8u);
-
+    //cv::imshow("distTransform", dist_transform_8u);
+    
     return dist_transform_8u;
 }
 

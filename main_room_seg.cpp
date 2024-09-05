@@ -35,9 +35,8 @@ cv::Mat makeFreeSpace(cv::Mat &src)
         for (int j = 0; j < cols; j++)
         {
             uchar pixelValue = src.at<uchar>(i, j);
-            if (pixelValue > 128)
-            {
-                // if (pixelValue > 205) {
+            if (pixelValue > 128) {
+            //if (pixelValue > 205) {
                 dst.at<uchar>(i, j) = 255;
             }
         }
@@ -159,7 +158,30 @@ vector<Point> edgePointsInCircle(const Point& center, int radius) {
 }
 
 
-// 원형 탐색 범위를 추가하는 함수
+// 원형 탐색 범위를 추가하는 함수 
+vector<Point> addHalfOverlappingCircles(const vector<Point>& data, int radius) {
+    vector<Point> circlesCenters;
+    
+    for (const auto& point : data) {
+        bool overlap = false;
+        
+        // 새로 추가할 원형 범위가 기존의 범위와 반만 겹치는지 확인
+        for (const auto& existingCenter : circlesCenters) {
+            if (isHalfOverlap(existingCenter, radius, point, radius)) {
+                overlap = true;
+                break;
+            }
+        }
+        
+        if (!overlap) {
+            circlesCenters.push_back(point);
+        }
+    }
+    
+    return circlesCenters;
+}
+
+
 vector<Point> addNonOverlappingCircles(const vector<Point>& data, int radius) {
     vector<Point> circlesCenters;
 
@@ -233,6 +255,28 @@ void fillCircle(Mat& image, const Point& center, int radius, const Scalar& color
     }
 }
 
+
+void drawingOutLineCirculePoint(Mat& image, cv::Point circlesCenters, int radius)
+{
+    // 원형 영역을 이미지에 그리기
+    vector<Point> edgePoints = edgePointsInCircle(circlesCenters, radius);
+    // // 원의 경계 점을 초록색으로 표시
+    // for (const auto& point : edgePoints) {
+    //     if (point.x >= 0 && point.x < image.cols && point.y >= 0 && point.y < image.rows) {
+    //         image.at<Vec3b>(point.y, point.x) = Vec3b(0, 255, 0);
+    //     }
+    // }
+
+    // 원을 실선으로 그리기
+    for (size_t i = 0; i < edgePoints.size(); i++)
+    {
+        Point start = edgePoints[i];
+        Point end = edgePoints[(i + 1) % edgePoints.size()]; // 마지막 점과 첫 점을 연결
+        line(image, start, end, Scalar(255, 0, 0), 1);       // 파란색으로 실선 그리기
+    }
+}
+
+
 void drawingOutLineCircule(Mat& image, vector<Point> circlesCenters, int radius)
 {
 
@@ -260,52 +304,63 @@ int main() {
     std::string home_path = getenv("HOME");
     // std::cout << home_path << std::endl;
 
-//     // 이미지 파일 경로
-//     cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
-//     // cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
-//     if (raw_img.empty())
-//     {
-//         std::cerr << "Error: Unable to open image file: " << std::endl;
-//         return -1;
-//     }
-//     cv::Mat result_img;
-//     cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
-//     cv::Mat result_img2 = result_img.clone();
+    // 이미지 파일 경로
+    cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+    //cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
+    if (raw_img.empty())
+    {
+        std::cerr << "Error: Unable to open image file: " << std::endl;
+        return -1;
+    }
 
-// //     FeatureDetection fd(raw_img);
-// //     fd.straightLineDetection();
+    cv::Mat result_img;
+    cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
+    cv::Mat result_img2 = result_img.clone();
 
-// //     // 병합 픽셀 설정: 9, 12;
-// //     fd.detectEndPoints(9);
-// //     // fd.getUpdateFeaturePoints();
+    FeatureDetection fd(raw_img);
+    fd.straightLineDetection();
 
-// //     for (const auto &pt : fd.getUpdateFeaturePoints())
-// //     {
-// //         cv::circle(result_img, pt, 3, cv::Scalar(0, 0, 255), -1);
-// //     }
+    // 병합 픽셀 설정: 9, 12;
+    fd.detectEndPoints(9);
+    // fd.getUpdateFeaturePoints();
+
+    for (const auto &pt : fd.getUpdateFeaturePoints())
+    {
+        cv::circle(result_img, pt, 3, cv::Scalar(0, 0, 255), -1);
+    }
     
+    cv::imshow("result_img", result_img);
 
-//     cv::Mat img_freeSpace = makeFreeSpace(raw_img);
-//     imshow("img_freeSpace", img_freeSpace);
+    
+    cv::Mat img_freeSpace = makeFreeSpace(raw_img);
+    imshow("img_freeSpace", img_freeSpace);
 
-        
-//     // 윤곽선 찾기
-//     vector<vector<Point>> contours;
-//     vector<Vec4i> hierarchy;
-//     findContours(img_freeSpace, contours, hierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
 
-//     // 컨투어 검출
-//     findContours(img_freeSpace, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
+    // // 윤곽선 찾기
+    // vector<vector<Point>> contours;
+    // vector<Vec4i> hierarchy;
+    // findContours(img_freeSpace, contours, hierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
 
-//     // 검출된 컨투어를 원본 이미지에 그리기
-//     Mat drawing_contours = Mat::zeros(img_freeSpace.size(), CV_8UC1);    
-//     for (size_t i = 0; i < contours.size(); i++)
-//     {
-//         // cout << "contours.size(): "<< contours[i].size() << endl;
-//         if (contours[i].size() > 15)
-//             drawContours(drawing_contours, contours, (int)i, Scalar(255), 1);
-//     }
-//     imshow("drawing_contours", drawing_contours);
+    // // 컨투어 검출
+    // findContours(img_freeSpace, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
+
+    // // 검출된 컨투어를 원본 이미지에 그리기
+    // Mat drawing_contours = Mat::zeros(img_freeSpace.size(), CV_8UC1);    
+     
+
+    // for (size_t i = 0; i < contours.size(); i++)
+    // {
+    //     // cout << "contours.size(): "<< contours[i].size() << endl;
+    //     if (contours[i].size() > 15)
+    //         drawContours(drawing_contours, contours, (int)i, Scalar(255), 1);
+    // }
+    // imshow("drawing_contours", drawing_contours);
+    
+    // // 다각형 채우기
+    // floodFill(drawing_contours, Point(0, 0), Scalar(255));
+
+    // // 결과 이미지 출력
+    // imshow("Drawing_Region", drawing_contours);
 
 
 //     vector<Point> contour;
@@ -324,10 +379,7 @@ int main() {
 //         cv::circle(result_img, pt, 3, cv::Scalar(0, 255, 0), -1);        
 //     }
 //     imshow("result_img", result_img);
-
-
-
-
+ 
 
     // // cv::circle(result_img, seedPoint, 3, cv::Scalar(255, 255, 0), -1);
     // // detectEndPoints(drawing, result_contour);
@@ -338,77 +390,52 @@ int main() {
     // }
     // imshow("test", result_img);
 
-    // // 다각형 채우기
-    // floodFill(drawing, Point(img_freeSpace.cols / 2, img_freeSpace.rows / 2), Scalar(255));
 
-    // // 결과 이미지 출력
-    // imshow("Drawing_Region", drawing);
+    //-----------------------------------------------------
 
+    TrajectionPoint tp;
+    cv::Mat img_dist = tp.makeDistanceTransform(img_freeSpace);
+    imshow("img_dist", img_dist);
 
-    // //-----------------------------------------------------
-    // TrajectionPoint tp;
-    // cv::Mat img_dist = tp.makeDistanceTransform(drawing);
-    // imshow("img_dist", img_dist);
+    cv::Mat img_skeletion;
+    tp.zhangSuenThinning(img_dist, img_skeletion); 
+    cv::imshow("img_skeletion", img_skeletion);      
 
-    // cv::Mat img_skeletion;
-    // tp.zhangSuenThinning(img_dist, img_skeletion); 
-    // cv::imshow("img_skeletion", img_skeletion);      
+    std::vector<cv::Point> trajector_points;
+    for (int i = 0; i<img_skeletion.rows; i++) {
+        for (int j=0; j<img_skeletion.cols; j++) {
 
-
-
-    Mat image = Mat::zeros(500, 500, CV_8UC3);
-
-    // 데이터로 사용할 점들 설정
-    vector<Point> data = {
-        Point(100, 100), Point(110, 110), Point(120, 120), 
-        Point(130, 130), Point(140, 140), Point(150, 150)
-    };
-
-    int radius = 30; // 탐색 범위 반지름
-
-    // 원형 탐색 범위가 겹치지 않도록 점들을 추가
-    vector<Point> circlesCenters = addNonOverlappingCircles(data, radius);
-
-    // 원형 영역을 이미지에 채우기
-    for (const auto& center : circlesCenters) {
-        fillCircle(image, center, radius, Scalar(0, 255, 0)); // 초록색으로 원 내부 채우기
+            if (img_skeletion.at<uchar>(i, j) == 255) {
+                trajector_points.push_back(cv::Point(j, i));
+            }
+        }
     }
 
-    drawingOutLineCircule(image, circlesCenters, radius);
+    cv::Mat img_color;
+    cv::cvtColor(img_dist, img_color, cv::COLOR_GRAY2RGB);
 
-    // 데이터 포인트를 이미지에 표시
-    for (const auto& point : data) {
-        fillCircle(image, point, 3, Scalar(0, 0, 255)); // 빨간색 점 표시
+    // for (const auto &pt : trajector_points)
+    // {
+    //     cv::circle(img_color, pt, 3, cv::Scalar(0, 0, 255), -1);
+    //     // cv::imshow("img_color", img_color);      
+    //     // cv::waitKey();
+    // }
+
+    std::vector<cv::Point> update_trajector_points = sortPoints(trajector_points);
+    
+    for (const auto &pt : update_trajector_points)
+    {
+        cv::circle(img_color, pt, 1, cv::Scalar(0, 0, 255), -1);        
     }
 
 
+    int radius = 15; // 탐색 범위 반지름
+    vector<Point> circlesCenters = addHalfOverlappingCircles(update_trajector_points, radius);
+    drawingOutLineCircule(img_color, circlesCenters, radius);
 
-    // // 원형 영역을 이미지에 그리기
-    // for (const auto& center : circlesCenters) {
-    //     vector<Point> edgePoints = edgePointsInCircle(center, radius);
-        
-    //     // 원의 경계 점을 초록색으로 표시
-    //     for (const auto& point : edgePoints) {
-    //         if (point.x >= 0 && point.x < image.cols && point.y >= 0 && point.y < image.rows) {
-    //             image.at<Vec3b>(point.y, point.x) = Vec3b(0, 255, 0); 
-    //             //circle(image, point, 3, Scalar(0, 0, 255), -1); // 빨간색 점 표시                
-    //         }
-    //     }        
-    //     // // 원을 실선으로 그리기
-    //     // for (size_t i = 0; i < edgePoints.size(); i++) {
-    //     //     Point start = edgePoints[i];
-    //     //     Point end = edgePoints[(i + 1) % edgePoints.size()]; // 마지막 점과 첫 점을 연결
-    //     //     line(image, start, end, Scalar(255, 0, 0), 1); // 파란색으로 실선 그리기
-    //     // }
-    // }
+    cv::imshow("img_color", img_color);      
+    cv::waitKey();
 
-    // // 데이터 포인트를 이미지에 표시
-    // for (const auto& point : data) {
-    //     circle(image, point, 3, Scalar(0, 0, 255), -1); // 빨간색 점 표시
-    // }
-
-    imshow("image", image);
-    waitKey();
 
 
     return 0;
