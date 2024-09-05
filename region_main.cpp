@@ -1,3 +1,5 @@
+// 집에서  9/5 10:13
+
 #include <opencv2/opencv.hpp>
 
 #include <vector>
@@ -211,6 +213,7 @@ std::vector<cv::Point> sortPoints(const std::vector<cv::Point>& points) {
 
 int main() {
     std::string home_path = getenv("HOME");
+
     // std::cout << home_path << std::endl;
 
 //     // 이미지 파일 경로
