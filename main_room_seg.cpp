@@ -11,9 +11,32 @@
 #include "featuredetection.h"
 #include "trajectioryPoint.h"
 
+
 using namespace cv;
 using namespace std;
 
+
+// 경로 데이터 구조체 정의
+struct SEGDATA {
+    
+    cv::Point centerPoint;                // 기준이 되는 Point
+    std::vector<cv::Point> feturePoints;
+    std::vector<cv::Point> trajectoryPoints;   // 경로를 저장하는 vector
+
+    // 생성자
+    SEGDATA() = default;    
+    SEGDATA(const cv::Point& key, const std::vector<cv::Point>& feture, const std::vector<cv::Point>& traj)
+        : centerPoint(key), feturePoints(feture), trajectoryPoints(traj) {}
+
+    // 경로에 포인트 추가
+    void addFeturePoints(const cv::Point& point) {
+        feturePoints.push_back(point);
+    }
+
+    void addTrajectoryPoint(const cv::Point& point) {
+        trajectoryPoints.push_back(point);
+    } 
+};
 // Custom comp
 Scalar randomColor()
 {
@@ -255,8 +278,216 @@ void fillCircle(Mat& image, const Point& center, int radius, const Scalar& color
     }
 }
 
+void featureInCircle(Mat& image, const Point& center, int radius, const Scalar& color) {
+    for (int y = center.y - radius; y <= center.y + radius; ++y) {
+        for (int x = center.x - radius; x <= center.x + radius; ++x) {
+            // 원의 방정식 (x - center.x)^2 + (y - center.y)^2 <= radius^2
+            if ((x - center.x) * (x - center.x) + (y - center.y) * (y - center.y) <= radius * radius) {
+                if (x >= 0 && x < image.cols && y >= 0 && y < image.rows) {
+                    image.at<Vec3b>(y, x) = Vec3b(color[0], color[1], color[2]); // 원 내부를 채움
+                }
+            }
+        }
+    }
+}
 
-void drawingOutLineCirculePoint(Mat& image, cv::Point circlesCenters, int radius)
+// void detectExploreFeature(Mat &image, vector<Point> &fdata, const Point &center, int radius, const Scalar &color)
+// {
+//     if (fdata.empty())
+//     {
+//     }
+//     else
+//     {
+//         bool state = 0;
+//         for (int y = center.y - radius; y <= center.y + radius; ++y)
+//         {
+//             for (int x = center.x - radius; x <= center.x + radius; ++x)
+//             {
+//                 // 원의 방정식 (x - center.x)^2 + (y - center.y)^2 <= radius^2
+//                 if ((x - center.x) * (x - center.x) + (y - center.y) * (y - center.y) <= radius * radius)
+//                 {
+//                     if (x >= 0 && x < image.cols && y >= 0 && y < image.rows)
+//                     {
+
+//                         for (size_t i = 0; i < fdata.size();)
+//                         {
+//                             cv::Point ft = fdata[i];
+//                             if (x == ft.x && y == ft.y)
+//                             {
+//                                 std::cout << ft << std::endl;
+//                                 fdata.erase(fdata.begin() + i);
+//                                 state = 1;
+//                             }
+//                             else
+//                             {
+//                                 ++i;
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+
+//         if (state == 1)
+//         {
+//             std::cout << "center: " << center << std::endl;
+//         }
+//     }
+// }
+
+struct PointCompare {
+    bool operator()(const cv::Point& p1, const cv::Point& p2) const {
+        if (p1.x != p2.x)
+            return p1.x < p2.x;
+        return p1.y < p2.y;
+    }
+};
+
+typedef std::map<cv::Point, std::vector<cv::Point>, PointCompare> PointMap;
+
+
+PointMap detectExploreFeature(Mat &image, vector<Point> &fdata, const Point &center, int radius)
+{
+    PointMap dst;
+    if (fdata.empty())
+    {
+        return dst;
+    }
+
+    std::vector<cv::Point> featurePts;
+    for (int y = center.y - radius; y <= center.y + radius; ++y)
+    {
+        for (int x = center.x - radius; x <= center.x + radius; ++x)
+        {
+            // 원의 방정식 (x - center.x)^2 + (y - center.y)^2 <= radius^2
+            if ((x - center.x) * (x - center.x) + (y - center.y) * (y - center.y) <= radius * radius)
+            {
+                if (x >= 0 && x < image.cols && y >= 0 && y < image.rows)
+                {
+                    cv::Point currentPoint(x, y);
+                    if (std::find(fdata.begin(), fdata.end(), currentPoint) != fdata.end())
+                    {
+                        featurePts.push_back(currentPoint); 
+                    }                    
+                }
+            }
+        }
+    }
+    if(!featurePts.empty()) {
+        dst[center] = featurePts;
+    }
+    return dst;
+}
+
+
+PointMap detectExploreFeature2(Mat &image, vector<Point> &fdata, const Point &center, int radius)
+{
+    PointMap dst;
+    if (fdata.empty())
+    {
+        return dst;
+    }
+
+    std::vector<cv::Point> featurePts;
+    for (int y = center.y - radius; y <= center.y + radius; ++y)
+    {
+        for (int x = center.x - radius; x <= center.x + radius; ++x)
+        {
+            // 원의 방정식 (x - center.x)^2 + (y - center.y)^2 <= radius^2
+            if ((x - center.x) * (x - center.x) + (y - center.y) * (y - center.y) <= radius * radius)
+            {
+                if (x >= 0 && x < image.cols && y >= 0 && y < image.rows)
+                {
+                    cv::Point currentPoint(x, y);
+                    if (std::find(fdata.begin(), fdata.end(), currentPoint) != fdata.end())
+                    {
+                        featurePts.push_back(currentPoint); 
+                    }                    
+                }
+            }
+        }
+    }
+    if(!featurePts.empty()) {
+        dst[center] = featurePts;
+    }
+    return dst;
+}
+
+SEGDATA detectExploreFeature3(Mat &image, std::vector<cv::Point> sorted_trajectory_points, vector<Point> &fdata, const Point &center, int radius)
+{
+
+    SEGDATA dst2;
+    //PointMap dst;
+    if (fdata.empty())
+    {
+        return dst2;
+    }
+
+    std::vector<cv::Point> featurePts;
+    std::vector<cv::Point> trajectoryPts;
+
+    for (int y = center.y - radius; y <= center.y + radius; ++y)
+    {
+        for (int x = center.x - radius; x <= center.x + radius; ++x)
+        {
+            // 원의 방정식 (x - center.x)^2 + (y - center.y)^2 <= radius^2
+            if ((x - center.x) * (x - center.x) + (y - center.y) * (y - center.y) <= radius * radius)
+            {
+                if (x >= 0 && x < image.cols && y >= 0 && y < image.rows)
+                {
+                    cv::Point explorePoint(x, y);                    
+                    if (std::find(fdata.begin(), fdata.end(), explorePoint) != fdata.end())
+                    {
+                        featurePts.push_back(explorePoint); 
+                    }                    
+                }
+            }
+        }
+    }
+
+    if(!featurePts.empty()) {
+        //dst[center] = featurePts;
+        //dst2(center, featurePts, featurePts);
+        dst2 = SEGDATA(center, featurePts, sorted_trajectory_points); // 올바른 객체 초기화
+    }
+
+    return dst2;
+}
+
+
+// x, y 범위 내에 포함되는 포인트를 찾는 함수
+std::vector<cv::Point> findPointsInRange(const std::vector<cv::Point>& points, int x_min, int x_max, int y_min, int y_max) {
+    
+    std::vector<cv::Point> filteredPoints;
+
+    // std::copy_if를 사용하여 조건에 맞는 점들만 필터링
+    std::copy_if(points.begin(), points.end(), std::back_inserter(filteredPoints), 
+        [x_min, x_max, y_min, y_max](const cv::Point& pt) {
+            return (pt.x >= x_min && pt.x <= x_max && pt.y >= y_min && pt.y <= y_max);
+        });
+
+    return filteredPoints;
+}
+
+SEGDATA testExploreFeature3(std::vector<cv::Point> &feature_points, 
+                            std::vector<cv::Point> &trajectory_points, 
+                            const cv::Point &center, int radius)
+{
+    int x_min = center.x - radius;
+    int x_max = center.x + radius;
+    int y_min = center.y - radius;
+    int y_max = center.y + radius;
+
+    std::vector<cv::Point> featurePts = findPointsInRange(feature_points, x_min, x_max, y_min, y_max);
+    std::vector<cv::Point> trajectoryPts = findPointsInRange(trajectory_points, x_min, x_max, y_min, y_max);
+
+    SEGDATA dst = SEGDATA(center, featurePts, trajectoryPts);
+
+    return dst;
+}
+
+
+void drawingSetpCircule(Mat& image, cv::Point circlesCenters, int radius)
 {
     // 원형 영역을 이미지에 그리기
     vector<Point> edgePoints = edgePointsInCircle(circlesCenters, radius);
@@ -275,7 +506,6 @@ void drawingOutLineCirculePoint(Mat& image, cv::Point circlesCenters, int radius
         line(image, start, end, Scalar(255, 0, 0), 1);       // 파란색으로 실선 그리기
     }
 }
-
 
 void drawingOutLineCircule(Mat& image, vector<Point> circlesCenters, int radius)
 {
@@ -305,7 +535,7 @@ int main() {
     // std::cout << home_path << std::endl;
 
     // 이미지 파일 경로
-    cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+    cv::Mat raw_img = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
     //cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
     if (raw_img.empty())
     {
@@ -322,11 +552,13 @@ int main() {
 
     // 병합 픽셀 설정: 9, 12;
     fd.detectEndPoints(9);
-    // fd.getUpdateFeaturePoints();
+    std::vector<cv::Point> fpoints = fd.getUpdateFeaturePoints();
+ 
 
-    for (const auto &pt : fd.getUpdateFeaturePoints())
+    for (size_t i = 0; i< fpoints.size(); i++)
     {
-        cv::circle(result_img, pt, 3, cv::Scalar(0, 0, 255), -1);
+        cv::Point pt = fpoints[i];;
+        cv::circle(result_img, pt, 3, CV_RGB(0, 255, 0), -1); 
     }
     
     cv::imshow("result_img", result_img);
@@ -334,62 +566,6 @@ int main() {
     
     cv::Mat img_freeSpace = makeFreeSpace(raw_img);
     imshow("img_freeSpace", img_freeSpace);
-
-
-    // // 윤곽선 찾기
-    // vector<vector<Point>> contours;
-    // vector<Vec4i> hierarchy;
-    // findContours(img_freeSpace, contours, hierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
-
-    // // 컨투어 검출
-    // findContours(img_freeSpace, contours, hierarchy, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
-
-    // // 검출된 컨투어를 원본 이미지에 그리기
-    // Mat drawing_contours = Mat::zeros(img_freeSpace.size(), CV_8UC1);    
-     
-
-    // for (size_t i = 0; i < contours.size(); i++)
-    // {
-    //     // cout << "contours.size(): "<< contours[i].size() << endl;
-    //     if (contours[i].size() > 15)
-    //         drawContours(drawing_contours, contours, (int)i, Scalar(255), 1);
-    // }
-    // imshow("drawing_contours", drawing_contours);
-    
-    // // 다각형 채우기
-    // floodFill(drawing_contours, Point(0, 0), Scalar(255));
-
-    // // 결과 이미지 출력
-    // imshow("Drawing_Region", drawing_contours);
-
-
-//     vector<Point> contour;
-//     for (int i = 0; i < drawing_contours.rows; i++)
-//     {
-//         for (int j= 0; j < drawing_contours.cols; j++)
-//         {
-//             if (drawing_contours.at<uchar>(i, j) == 255) 
-//                 contour.push_back(Point(j, i));
-//         }
-//     }
-
-
-//     for (const auto &pt : contour)
-//     {
-//         cv::circle(result_img, pt, 3, cv::Scalar(0, 255, 0), -1);        
-//     }
-//     imshow("result_img", result_img);
- 
-
-    // // cv::circle(result_img, seedPoint, 3, cv::Scalar(255, 255, 0), -1);
-    // // detectEndPoints(drawing, result_contour);
-
-    // for (const auto &pt : result_contour)
-    // {
-    //     cv::circle(result_img, pt, 3, cv::Scalar(0, 255, 0), -1);
-    // }
-    // imshow("test", result_img);
-
 
     //-----------------------------------------------------
 
@@ -401,12 +577,12 @@ int main() {
     tp.zhangSuenThinning(img_dist, img_skeletion); 
     cv::imshow("img_skeletion", img_skeletion);      
 
-    std::vector<cv::Point> trajector_points;
+    std::vector<cv::Point> trajectory_points;
     for (int i = 0; i<img_skeletion.rows; i++) {
         for (int j=0; j<img_skeletion.cols; j++) {
 
             if (img_skeletion.at<uchar>(i, j) == 255) {
-                trajector_points.push_back(cv::Point(j, i));
+                trajectory_points.push_back(cv::Point(j, i));
             }
         }
     }
@@ -421,26 +597,86 @@ int main() {
     //     // cv::waitKey();
     // }
 
-    std::vector<cv::Point> update_trajector_points = sortPoints(trajector_points);
+    std::vector<cv::Point> sorted_trajectory_points = sortPoints(trajectory_points);
     
-    for (const auto &pt : update_trajector_points)
+    for (const auto &pt : sorted_trajectory_points)
     {
-        cv::circle(img_color, pt, 1, cv::Scalar(0, 0, 255), -1);        
+        cv::circle(result_img, pt, 1, CV_RGB(255, 0, 0), -1);
     }
 
-
     int radius = 15; // 탐색 범위 반지름
-    vector<Point> circlesCenters = addHalfOverlappingCircles(update_trajector_points, radius);
-    drawingOutLineCircule(img_color, circlesCenters, radius);
+    vector<Point> circlesCenters = addHalfOverlappingCircles(sorted_trajectory_points, radius);
 
-    cv::imshow("img_color", img_color);      
-    cv::waitKey();
+    // # 1
+    // for (size_t i = 0; i < circlesCenters.size(); i++)
+    // {
+    //     cv::Point cp = circlesCenters[i];
+    //     PointMap db = detectExploreFeature(result_img, fpoints, cp, radius);
+
+    //     for (const auto &pair : db)
+    //     {
+    //         const cv::Point &key = pair.first;
+    //         const std::vector<cv::Point> &value = pair.second;
+
+    //         if (value.size() > 1)
+    //         {
+    //             drawingSetpCircule(result_img, cp, radius);
+    //             std::cout << "Key Point: (" << key.x << ", " << key.y << ")\n";
+    //             std::cout << "Values: ";
+    //             for (const auto &pt : value)
+    //             {
+    //                 std::cout << "(" << pt.x << ", " << pt.y << ") ";
+    //             }
+    //             std::cout << std::endl;
+    //         }
+    //     }
 
 
 
-    return 0;
-}
+        for (size_t i = 0; i < circlesCenters.size(); i++)
+        {
+            cv::Point cp = circlesCenters[i];
+            SEGDATA db = testExploreFeature3( fpoints, sorted_trajectory_points, cp, radius);
+                        
+            std::cout <<"-----------------------------------------------------" <<std::endl;
+            std::cout << "Key Point: (" << db.centerPoint.x << ", " << db.centerPoint.y << ")\n";            
+            std::cout << "         FeaturePts:";
+            for (const auto& pt : db.feturePoints) {
+                std::cout << "(" << pt.x << ", " << pt.y << ") ";
+            };            
+            std::cout <<std::endl;
+            std::cout << "         TrajectoryPts:";
+            for (const auto& pt : db.trajectoryPoints) {
+                std::cout << "(" << pt.x << ", " << pt.y << ") ";
+            };
+            std::cout <<std::endl;
+            std::cout <<"-----------------------------------------------------" <<std::endl;
 
+
+        // for (const auto &pair : db)
+        // {
+        //     const cv::Point &key = pair.first;
+        //     const std::vector<cv::Point> &value = pair.second;
+
+        //     if (value.size() > 1)
+        //     {
+        //         drawingSetpCircule(result_img, cp, radius);
+        //         std::cout << "Key Point: (" << key.x << ", " << key.y << ")\n";
+        //         std::cout << "Values: ";
+        //         for (const auto &pt : value)
+        //         {
+        //             std::cout << "(" << pt.x << ", " << pt.y << ") ";
+        //         }
+        //         std::cout << std::endl;
+        //     }
+        // }
+
+            cv::imshow("result_img2", result_img);
+            cv::waitKey();
+        }
+
+        return 0;
+    }
 
     //     // 결과 외곽선을 vector<Point>에 저장
     // vector<Point> result_contour; 

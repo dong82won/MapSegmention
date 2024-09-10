@@ -10,7 +10,6 @@
 
 int main()
 {
-<<<<<<< HEAD
     return cv::norm(p1 - p2);
 }
 
@@ -370,8 +369,4 @@ int main() {
 
 
     return 0;
-=======
-    std::cout <<"집, 10:15" << std::endl;
-    std::cout <<"다시 내려 받음"<< std::endl;
->>>>>>> 05f318ae93a77a109bc581499fe0c68f44f81a27
 }
