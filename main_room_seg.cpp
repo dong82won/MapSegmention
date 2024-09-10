@@ -22,20 +22,26 @@ struct SEGDATA {
     cv::Point centerPoint;                // 기준이 되는 Point
     std::vector<cv::Point> feturePoints;
     std::vector<cv::Point> trajectoryPoints;   // 경로를 저장하는 vector
+    bool state_ = false;
 
     // 생성자
     SEGDATA() = default;    
     SEGDATA(const cv::Point& key, const std::vector<cv::Point>& feture, const std::vector<cv::Point>& traj)
         : centerPoint(key), feturePoints(feture), trajectoryPoints(traj) {}
 
-    // 경로에 포인트 추가
-    void addFeturePoints(const cv::Point& point) {
-        feturePoints.push_back(point);
+    void addState(bool state)
+    {
+        state_ = state;
     }
 
-    void addTrajectoryPoint(const cv::Point& point) {
-        trajectoryPoints.push_back(point);
-    } 
+    // // 경로에 포인트 추가
+    // void addFeturePoints(const cv::Point& point) {
+    //     feturePoints.push_back(point);
+    // }
+
+    // void addTrajectoryPoint(const cv::Point& point) {
+    //     trajectoryPoints.push_back(point);
+    // } 
 };
 // Custom comp
 Scalar randomColor()
@@ -487,6 +493,21 @@ SEGDATA testExploreFeature3(std::vector<cv::Point> &feature_points,
 }
 
 
+
+void drawingSetpRectangle(Mat& image, cv::Point circlesCenters, int radius)
+{
+    int max_x = circlesCenters.x + radius;
+    int max_y = circlesCenters.y + radius;
+    int min_x = circlesCenters.x - radius;
+    int min_y = circlesCenters.y - radius;
+    cv::Rect rect(cv::Point(min_x, min_y), cv::Point(max_x, max_y));
+ 
+    
+    cv::rectangle(image, rect, cv::Scalar(255, 0, 0), 1);  // 파란색 사각형
+    
+}
+
+
 void drawingSetpCircule(Mat& image, cv::Point circlesCenters, int radius)
 {
     // 원형 영역을 이미지에 그리기
@@ -631,49 +652,71 @@ int main() {
     //         }
     //     }
 
+    std::vector<cv::Point> fpts;
+    std::vector<cv::Point> tpts;
 
 
-        for (size_t i = 0; i < circlesCenters.size(); i++)
-        {
-            cv::Point cp = circlesCenters[i];
-            SEGDATA db = testExploreFeature3( fpoints, sorted_trajectory_points, cp, radius);
-                        
+    for (size_t i = 0; i < circlesCenters.size(); )
+    {
+        cv::Point cp = circlesCenters[i];
+        SEGDATA db = testExploreFeature3( fpoints, sorted_trajectory_points, cp, radius);
+                    
+        
+        if ( db.feturePoints.size() < 2)  { 
+
+            circlesCenters.erase(circlesCenters.begin() + i); 
+        
+        } else {
+
+            
+            //drawingSetpCircule(result_img, cp, radius); 
+            drawingSetpRectangle(result_img, cp, radius);
+
+            db.addState(true);
             std::cout <<"-----------------------------------------------------" <<std::endl;
             std::cout << "Key Point: (" << db.centerPoint.x << ", " << db.centerPoint.y << ")\n";            
-            std::cout << "         FeaturePts:";
-            for (const auto& pt : db.feturePoints) {
+            std::cout << "         FeaturePts: " <<db.state_; 
+            
+            std::cout <<std::endl;
+            for (const auto &pt : db.feturePoints)
+            {
                 std::cout << "(" << pt.x << ", " << pt.y << ") ";
-            };            
+            };
+
             std::cout <<std::endl;
             std::cout << "         TrajectoryPts:";
             for (const auto& pt : db.trajectoryPoints) {
+
+                cv::circle(result_img, pt, 1, cv::Scalar(255, 0, 0), -1);
                 std::cout << "(" << pt.x << ", " << pt.y << ") ";
             };
+
             std::cout <<std::endl;
-            std::cout <<"-----------------------------------------------------" <<std::endl;
+            std::cout <<"-----------------------------------------------------" <<std::endl;   
+            ++i; 
+        } 
+    }
+
+    cv::imshow("result_img2", result_img);
+    cv::Mat dst;
+    double scaleFactor = 1.5;
+    cv::resize(result_img, dst, cv::Size(), scaleFactor, scaleFactor);
+    cv::imshow("dst", dst);
+    cv::waitKey();
+
+    // for (size_t i = 0; i < circlesCenters.size(); i++)
+    // {
 
 
-        // for (const auto &pair : db)
-        // {
-        //     const cv::Point &key = pair.first;
-        //     const std::vector<cv::Point> &value = pair.second;
 
-        //     if (value.size() > 1)
-        //     {
-        //         drawingSetpCircule(result_img, cp, radius);
-        //         std::cout << "Key Point: (" << key.x << ", " << key.y << ")\n";
-        //         std::cout << "Values: ";
-        //         for (const auto &pt : value)
-        //         {
-        //             std::cout << "(" << pt.x << ", " << pt.y << ") ";
-        //         }
-        //         std::cout << std::endl;
-        //     }
-        // }
 
-            cv::imshow("result_img2", result_img);
-            cv::waitKey();
-        }
+    // }
+
+
+
+
+
+
 
         return 0;
     }
