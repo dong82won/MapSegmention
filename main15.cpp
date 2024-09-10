@@ -117,7 +117,6 @@ void zhangSuenThinning(const cv::Mat &src, cv::Mat &dst)
     cv::Mat img;
     int th = (int)cv::threshold(src, img, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
 
-
     img /= 255;
     cv::Mat prev = cv::Mat::zeros(img.size(), CV_8UC1);
     cv::Mat diff;
