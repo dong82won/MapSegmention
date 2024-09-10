@@ -551,6 +551,18 @@ void drawingOutLineCircule(Mat& image, vector<Point> circlesCenters, int radius)
     }  
 }
 
+// 구조체 정의
+struct PointPair {
+    cv::Point p1;
+    cv::Point p2;
+    double distance; // 두 점 사이의 거리
+
+    // 생성자
+    PointPair(const cv::Point& point1, const cv::Point& point2)
+        : p1(point1), p2(point2), dist(euclideanDistance(point1 - point2)) {}
+};
+
+
 int main() {
     std::string home_path = getenv("HOME");
     // std::cout << home_path << std::endl;
@@ -656,6 +668,8 @@ int main() {
     std::vector<cv::Point> tpts;
 
 
+    // 쌍을 정의 (PointPair 사용)
+    std::vector<PointPair> pairs;
     for (size_t i = 0; i < circlesCenters.size(); )
     {
         cv::Point cp = circlesCenters[i];
@@ -678,10 +692,21 @@ int main() {
             std::cout << "         FeaturePts: " <<db.state_; 
             
             std::cout <<std::endl;
-            for (const auto &pt : db.feturePoints)
+
+            // for (const auto &pt : db.feturePoints)
+            // {
+            //     std::cout << "(" << pt.x << ", " << pt.y << ") "; 
+            // };
+
+            int numPoints = db.feturePoints.size();
+            for (int p=0; p<numPoints; ++p)
             {
-                std::cout << "(" << pt.x << ", " << pt.y << ") ";
-            };
+                cv::Point p1 = db.feturePoints[j];
+                cv::Point p2 = db.feturePoints[(j + 1) % numPoints]; // 다음 점, 마지막 점에서 첫 점으로 순환
+                pairs.push_back(std::make_pair(p1, p2));
+            }
+
+
 
             std::cout <<std::endl;
             std::cout << "         TrajectoryPts:";
