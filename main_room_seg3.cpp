@@ -211,6 +211,30 @@ vector<Point> addHalfOverlappingCircles(const vector<Point>& data, int radius) {
 }
 
 
+//추가
+vector<Point> addNOverlappingCircles(const vector<Point>& data, int radius) {
+    vector<Point> circlesCenters;
+    
+    for (const auto& point : data) {
+        bool overlap = false;
+        
+        // 새로 추가할 원형 범위가 기존의 범위와 반만 겹치는지 확인
+        for (const auto& existingCenter : circlesCenters) {
+            if (isOverlap(existingCenter, radius, point, radius)) {
+                overlap = true;
+                break;
+            }
+        }
+        
+        if (!overlap) {
+            circlesCenters.push_back(point);
+        }
+    }
+    
+    return circlesCenters;
+}
+
+
 vector<Point> addNonOverlappingCircles(const vector<Point>& data, int radius) {
     vector<Point> circlesCenters;
 
@@ -578,12 +602,95 @@ std::pair<cv::Point, double> findClosestPoint(const cv::Point& featurePt, const 
     return {closestPt, minDistance};  // 가장 가까운 TrajectoryPt와 그 거리 반환
 }
 
+
+// 유클리드 거리를 계산하는 함수
+double calculateEuclideanDistance(const cv::Point& pt) {
+    return std::sqrt(pt.x * pt.x + pt.y * pt.y);
+}
+
+// 좌표를 원점 기준으로 정렬하는 함수
+void sortPointsByDistanceFromOrigin(std::vector<cv::Point>& points) {
+    std::sort(points.begin(), points.end(), [](const cv::Point& a, const cv::Point& b) {
+        return calculateEuclideanDistance(a) < calculateEuclideanDistance(b);
+    });
+}
+
+
+
+// 순차적으로 좌표를 정렬하는 함수
+std::vector<cv::Point> sortPointsSequentially(const std::vector<cv::Point>& points) {
+    if (points.empty()) return {};
+
+    std::vector<cv::Point> sortedPoints;
+    std::vector<cv::Point> remainingPoints = points;
+
+    // 첫 좌표를 시작점으로 설정
+    sortedPoints.push_back(remainingPoints[0]);
+    remainingPoints.erase(remainingPoints.begin());
+
+    // 남은 좌표들 중 가장 가까운 점을 선택하는 방식으로 순차적으로 정렬
+    while (!remainingPoints.empty()) {
+        const cv::Point& lastPoint = sortedPoints.back();
+        auto nearestPointIter = std::min_element(remainingPoints.begin(), remainingPoints.end(),
+            [&lastPoint](const cv::Point& a, const cv::Point& b) {
+                return calculateDistance(lastPoint, a) < calculateDistance(lastPoint, b);
+            });
+
+        // 가장 가까운 점을 추가하고, 남은 리스트에서 제거
+        sortedPoints.push_back(*nearestPointIter);
+        remainingPoints.erase(nearestPointIter);
+    }
+
+    return sortedPoints;
+}
+
+// 극각(Polar Angle)을 계산하는 함수
+double calculatePolarAngle(const cv::Point& pt) {
+    return std::atan2(pt.y, pt.x);  // y축과 x축을 기준으로 각도 계산
+}
+
+// 좌표를 시계방향으로 정렬하는 함수
+void sortPointsClockwise(std::vector<cv::Point>& points) {
+    // atan2 값이 작은 것부터 큰 순서대로 정렬 (시계방향)
+    std::sort(points.begin(), points.end(), [](const cv::Point& a, const cv::Point& b) {
+        double angleA = calculatePolarAngle(a);
+        double angleB = calculatePolarAngle(b);
+        return angleA > angleB;  // 시계방향: 각도가 클수록 먼저
+    });
+}
+
+
+
+// 원점에서 가장 가까운 점을 찾는 함수
+cv::Point findClosestPointToOrigin(const std::vector<cv::Point>& points) {
+    return *std::min_element(points.begin(), points.end(), [](const cv::Point& a, const cv::Point& b) {
+        return calculateEuclideanDistance(a) < calculateEuclideanDistance(b);
+    });
+}
+
+// 극각(Polar Angle)을 계산하는 함수 (기준점을 기준으로)
+double calculatePolarAngleFromPoint(const cv::Point& reference, const cv::Point& pt) {
+    return std::atan2(pt.y - reference.y, pt.x - reference.x);  // 기준점에서의 각도 계산
+}
+
+// 기준점에서 시계방향으로 좌표를 정렬하는 함수
+void sortPointsClockwiseFromReference(std::vector<cv::Point>& points, const cv::Point& reference) {
+    // 기준점에서 각도를 계산하여 시계방향으로 정렬
+    std::sort(points.begin(), points.end(), [&reference](const cv::Point& a, const cv::Point& b) {
+        double angleA = calculatePolarAngleFromPoint(reference, a);
+        double angleB = calculatePolarAngleFromPoint(reference, b);
+        return angleA > angleB;  // 시계방향: 큰 각도부터 정렬
+    });
+}
+
 int main() {
     std::string home_path = getenv("HOME");
     // std::cout << home_path << std::endl;
 
     // 이미지 파일 경로
-    cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+    cv::Mat raw_img  = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+    //cv::Mat wall_img = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid_wall.png", cv::IMREAD_GRAYSCALE);
+    //cv::imshow("wall_img", wall_img);
     //cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
     if (raw_img.empty())
     {
@@ -591,17 +698,67 @@ int main() {
         return -1;
     }
 
-    cv::Mat result_img;
-    cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
-    cv::Mat result_img2 = result_img.clone();
 
-    FeatureDetection fd(raw_img);
+    int rows = raw_img.rows;
+    int cols = raw_img.cols;
+ 
+    cv::Mat wall(rows, cols, CV_8UC1, cv::Scalar(255));
+
+    for (int i = 0; i < rows; i++)
+    {
+        for (int j = 0; j < cols; j++)
+        {
+            uchar pixelValue = raw_img.at<uchar>(i, j);
+            if (pixelValue < 64) { 
+                wall.at<uchar>(i, j) = 0;
+            }
+        }
+    }
+    
+    
+    cv::imshow("wall", wall);
+
+    // 모폴로지 연산을 위한 커널 생성 (3x3 사각형 커널)
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+    //cv::Mat kernel = cv::getStructuringElement(cv::MORPH_CROSS, cv::Size(3, 3));
+
+    // 모폴로지 열림 연산 (작은 노이즈 제거)
+    cv::Mat opened;
+    cv::morphologyEx(wall, opened, cv::MORPH_OPEN, kernel);
+ 
+    
+    cv::imshow("opened", opened);
+    
+    FeatureDetection fd(opened);
     fd.straightLineDetection();
 
     // 병합 픽셀 설정: 9, 12;
     fd.detectEndPoints(9);
     std::vector<cv::Point> fpoints = fd.getUpdateFeaturePoints();
+
+
+    cv::Mat result_img;
+    cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
+
+    cv::Mat result_img2 = result_img.clone();
+
+    cv::Mat result_img3 = result_img.clone();
+
+
+
+    cv::line(result_img2, cv::Point(119, 91), cv::Point(105, 87),  cv::Scalar(0, 0, 255), 2);
+    cv::line(result_img2, cv::Point(105, 87), cv::Point(122, 83),  cv::Scalar(0, 0, 255), 2);
+    cv::line(result_img2, cv::Point(122, 83), cv::Point(94, 72) ,  cv::Scalar(0, 0, 255), 2);
+    
+    cv::line(result_img3, cv::Point(105, 87), cv::Point(94, 72),  cv::Scalar(0, 255, 0), 2);
+    cv::line(result_img3, cv::Point(94, 72), cv::Point(119, 91),  cv::Scalar(0, 255, 0), 2);
+    cv::line(result_img3, cv::Point(119, 91), cv::Point(122, 83),  cv::Scalar(0, 255, 0), 2);
+    
  
+
+    cv::imshow("result_img2-1", result_img2);
+    cv::imshow("result_img3", result_img3);
+
 
     for (size_t i = 0; i< fpoints.size(); i++)
     {
@@ -655,8 +812,9 @@ int main() {
         cv::circle(result_img, pt, 1, CV_RGB(255, 0, 0), -1);
     }
 
-    int radius = 15; // 탐색 범위 반지름
-    vector<Point> circlesCenters = addHalfOverlappingCircles(sorted_trajectory_points, radius);
+    int radius = 20; // 탐색 범위 반지름
+    //vector<Point> circlesCenters = addHalfOverlappingCircles(sorted_trajectory_points, radius);
+    vector<Point> circlesCenters = addNOverlappingCircles(sorted_trajectory_points, radius);
 
     // # 1
     // for (size_t i = 0; i < circlesCenters.size(); i++)
@@ -725,8 +883,43 @@ int main() {
 
             // };  
             */
-             
+            
+            std::cout << "FeaturePt:\n"; 
+            for (const auto &pt : db.feturePoints)
+            {
+                std::cout << "("<< pt.x << ", " << pt.y << ") "; 
+            }
+            std::cout << std::endl;
 
+
+             // // 좌표를 순차적으로 정렬
+            // std::vector<cv::Point> sortedPoints = sortPointsSequentially(db.feturePoints); 
+            // for (const auto &pt : sortedPoints)
+            // {
+            //     std::cout << "("<< pt.x << ", " << pt.y << ") "; 
+            // }
+
+
+            // 좌표를 원점 기준으로 정렬
+            //sortPointsByDistanceFromOrigin(db.feturePoints); 
+            
+            // 좌표를 시계방향으로 정렬
+            //sortPointsClockwise(db.feturePoints); 
+
+
+            // 원점에서 가장 가까운 점을 찾기
+            cv::Point closestPoint = findClosestPointToOrigin(db.feturePoints);
+
+            // 가장 가까운 점을 기준으로 시계방향 정렬
+            sortPointsClockwiseFromReference(db.feturePoints, closestPoint);
+
+            for (const auto &pt : db.feturePoints)
+            {
+                std::cout << "("<< pt.x << ", " << pt.y << ") "; 
+            }
+ 
+
+            std::cout << std::endl;
             int numPoints = db.feturePoints.size();  
             // 쌍을 정의 (PointPair 사용)
             std::vector<PointPair> pairs;  
@@ -754,9 +947,11 @@ int main() {
             {
                 std::cout <<"("<<pairs[t].p1.x << ", " << pairs[t].p1.y << ") - ("<<pairs[t].p2.x << ", " << pairs[t].p2.y 
                 << ") dist: " << pairs[t].dist << endl; 
-                if (pairs[t].dist < 15)
+
+                if (pairs[t].dist < 20)
                 {
-                    cv::line(img_freeSpace, cv::Point(pairs[t].p1), cv::Point(pairs[t].p2), cv::Scalar(0), 2);  
+                    cv::line(img_freeSpace, cv::Point(pairs[t].p1), cv::Point(pairs[t].p2), cv::Scalar(0), 2);
+                    cv::line(result_img, cv::Point(pairs[t].p1), cv::Point(pairs[t].p2), cv::Scalar(0, 0, 255), 2);   
                 } 
             }  
 
@@ -771,25 +966,59 @@ int main() {
             std::cout <<std::endl;
             std::cout <<"-----------------------------------------------------" <<std::endl;   
             ++i; 
-        } 
+        }
+        cv::imshow("result_img2", result_img);
+        cv::imshow("img_freeSpace2", img_freeSpace);
+        
+        cv::waitKey();
+
     }
-
-
-
-
-
-
-    cv::imshow("result_img2", result_img);
-
-    cv::imshow("img_freeSpace2", img_freeSpace);
     
-    
+
+
     cv::Mat dst;
     double scaleFactor = 1.5;
     cv::resize(result_img, dst, cv::Size(), scaleFactor, scaleFactor);
     cv::imshow("dst", dst);
+
+
+    //  // 외곽선 검출
+    // std::vector<std::vector<cv::Point>> contours;
+    // std::vector<cv::Vec4i> hierarchy;
+
+    // cv::findContours(img_freeSpace, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+
+    
+    // // 외곽선을 그리기 위한 컬러 이미지로 변환
+    // cv::Mat contourImage = cv::Mat::zeros(img_freeSpace.size(), CV_8UC3);
+    // cv::Mat contourImage2 = contourImage.clone();
+
+    // for (size_t i = 0; i < contours.size(); i++) {
+
+    //     std::vector<cv::Point> approx;
+    //     double epsilon = 0.001 * cv::arcLength(contours[i], true); 
+    //     cv::approxPolyDP(contours[i], approx, epsilon, true);
+
+    //     double perimeter = cv::arcLength(approx, true);  // 근사화된 외곽선의 길이
+    //     double area = cv::contourArea(approx);  // 근사화된 외곽선의 면적 
+
+    //     //std::cout << "1 Contour " << i << " has length: " << perimeter << " and area: " << area << std::endl;
+    //     cv::drawContours(contourImage, std::vector<std::vector<cv::Point>>{approx}, -1, cv::Scalar(0, 255, 0), 1);  
+
+    //     if (area > 15 && perimeter > 15 ) 
+    //     {
+    //         cv::drawContours(contourImage2, std::vector<std::vector<cv::Point>>{approx}, -1, cv::Scalar(0, 255, 0), 1);  
+    //         std::cout << "2 Contour " << i << " has length: " << perimeter << " and area: " << area << std::endl;
+    //     }
+        
+    // }
+
+
+    // cv::imshow("Contours", contourImage);
+    // cv::imshow("contours2", contourImage2);
+    
     cv::waitKey();
- 
+
 
 
 
@@ -799,4 +1028,3 @@ int main() {
         return 0;
     }
 
-     

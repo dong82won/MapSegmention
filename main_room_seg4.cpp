@@ -10,6 +10,7 @@
 // #include "lsd.h"
 #include "featuredetection.h"
 #include "trajectioryPoint.h"
+#include "MSED.h"
 
 
 using namespace cv;
@@ -197,6 +198,30 @@ vector<Point> addHalfOverlappingCircles(const vector<Point>& data, int radius) {
         // 새로 추가할 원형 범위가 기존의 범위와 반만 겹치는지 확인
         for (const auto& existingCenter : circlesCenters) {
             if (isHalfOverlap(existingCenter, radius, point, radius)) {
+                overlap = true;
+                break;
+            }
+        }
+        
+        if (!overlap) {
+            circlesCenters.push_back(point);
+        }
+    }
+    
+    return circlesCenters;
+}
+
+
+//추가
+vector<Point> addNOverlappingCircles(const vector<Point>& data, int radius) {
+    vector<Point> circlesCenters;
+    
+    for (const auto& point : data) {
+        bool overlap = false;
+        
+        // 새로 추가할 원형 범위가 기존의 범위와 반만 겹치는지 확인
+        for (const auto& existingCenter : circlesCenters) {
+            if (isOverlap(existingCenter, radius, point, radius)) {
                 overlap = true;
                 break;
             }
@@ -578,12 +603,255 @@ std::pair<cv::Point, double> findClosestPoint(const cv::Point& featurePt, const 
     return {closestPt, minDistance};  // 가장 가까운 TrajectoryPt와 그 거리 반환
 }
 
+
+// 유클리드 거리를 계산하는 함수
+double calculateEuclideanDistance(const cv::Point& pt) {
+    return std::sqrt(pt.x * pt.x + pt.y * pt.y);
+}
+
+// 좌표를 원점 기준으로 정렬하는 함수
+void sortPointsByDistanceFromOrigin(std::vector<cv::Point>& points) {
+    std::sort(points.begin(), points.end(), [](const cv::Point& a, const cv::Point& b) {
+        return calculateEuclideanDistance(a) < calculateEuclideanDistance(b);
+    });
+}
+
+
+
+// 순차적으로 좌표를 정렬하는 함수
+std::vector<cv::Point> sortPointsSequentially(const std::vector<cv::Point>& points) {
+    if (points.empty()) return {};
+
+    std::vector<cv::Point> sortedPoints;
+    std::vector<cv::Point> remainingPoints = points;
+
+    // 첫 좌표를 시작점으로 설정
+    sortedPoints.push_back(remainingPoints[0]);
+    remainingPoints.erase(remainingPoints.begin());
+
+    // 남은 좌표들 중 가장 가까운 점을 선택하는 방식으로 순차적으로 정렬
+    while (!remainingPoints.empty()) {
+        const cv::Point& lastPoint = sortedPoints.back();
+        auto nearestPointIter = std::min_element(remainingPoints.begin(), remainingPoints.end(),
+            [&lastPoint](const cv::Point& a, const cv::Point& b) {
+                return calculateDistance(lastPoint, a) < calculateDistance(lastPoint, b);
+            });
+
+        // 가장 가까운 점을 추가하고, 남은 리스트에서 제거
+        sortedPoints.push_back(*nearestPointIter);
+        remainingPoints.erase(nearestPointIter);
+    }
+
+    return sortedPoints;
+}
+
+// 극각(Polar Angle)을 계산하는 함수
+double calculatePolarAngle(const cv::Point& pt) {
+    return std::atan2(pt.y, pt.x);  // y축과 x축을 기준으로 각도 계산
+}
+
+// 좌표를 시계방향으로 정렬하는 함수
+void sortPointsClockwise(std::vector<cv::Point>& points) {
+    // atan2 값이 작은 것부터 큰 순서대로 정렬 (시계방향)
+    std::sort(points.begin(), points.end(), [](const cv::Point& a, const cv::Point& b) {
+        double angleA = calculatePolarAngle(a);
+        double angleB = calculatePolarAngle(b);
+        return angleA > angleB;  // 시계방향: 각도가 클수록 먼저
+    });
+}
+
+
+
+// 원점에서 가장 가까운 점을 찾는 함수
+cv::Point findClosestPointToOrigin(const std::vector<cv::Point>& points) {
+    return *std::min_element(points.begin(), points.end(), [](const cv::Point& a, const cv::Point& b) {
+        return calculateEuclideanDistance(a) < calculateEuclideanDistance(b);
+    });
+}
+
+// 극각(Polar Angle)을 계산하는 함수 (기준점을 기준으로)
+double calculatePolarAngleFromPoint(const cv::Point& reference, const cv::Point& pt) {
+    return std::atan2(pt.y - reference.y, pt.x - reference.x);  // 기준점에서의 각도 계산
+}
+
+// 기준점에서 시계방향으로 좌표를 정렬하는 함수
+void sortPointsClockwiseFromReference(std::vector<cv::Point>& points, const cv::Point& reference) {
+    // 기준점에서 각도를 계산하여 시계방향으로 정렬
+    std::sort(points.begin(), points.end(), [&reference](const cv::Point& a, const cv::Point& b) {
+        double angleA = calculatePolarAngleFromPoint(reference, a);
+        double angleB = calculatePolarAngleFromPoint(reference, b);
+        return angleA > angleB;  // 시계방향: 큰 각도부터 정렬
+    });
+}
+
+
+cv::Mat makeImageWall(cv::Mat &occupancyMap)
+{
+
+    int rows = occupancyMap.rows;
+    int cols = occupancyMap.cols;
+
+    cv::Mat wall_img = cv::Mat::zeros(occupancyMap.size(), CV_8UC1);
+
+    for (int i = 0; i < rows; i++)
+    {
+        for (int j = 0; j < cols; j++)
+        {
+            uchar pixelValue = occupancyMap.at<uchar>(i, j);
+            if (pixelValue < 64)
+            {
+                wall_img.at<uchar>(i, j) = 255;
+            }
+        }
+    }
+    return wall_img;
+}
+
+
+typedef struct _EDGEINFO
+{ 
+    cv::Point startPt;
+    cv::Point endPt; 
+    std::vector<cv::Point> turningPoints;
+    std::vector<cv::Point> turningPoints2;
+
+} EDGEINFO;
+
+
+void drawPoints(cv::Mat &img, std::vector<Point> points, cv::Scalar color)
+{
+    for (int k = 0; k < points.size(); k++)
+    {
+        cv::drawMarker(img, points.at(k), color, cv::MARKER_TILTED_CROSS, 6);
+    }
+}
+ 
+
+// 이웃을 카운트하는 함수
+int countNeighbors(const cv::Point& point, const std::vector<cv::Point>& coordinates) {
+    int count = 0;
+    
+    for (const auto& coord : coordinates) {
+        // 8방향에 해당하는 이웃을 확인 (직교 및 대각선 방향)
+        if (std::abs(coord.x - point.x) <= 1 && std::abs(coord.y - point.y) <= 1) {
+            if (coord != point) {
+                count++;
+            }
+        }
+    }
+    
+    return count;
+}
+
+// 시작점과 끝점을 찾는 함수
+std::pair<cv::Point, cv::Point> findStartEndPoints(const std::vector<cv::Point>& coordinates) {
+    cv::Point startPoint(0, 0), endPoint(0, 0);
+    
+    for (const auto& point : coordinates) {
+        int neighborCount = countNeighbors(point, coordinates);
+        
+        if (neighborCount == 1) {
+            if (startPoint == cv::Point(0, 0)) {
+                startPoint = point;  // 첫 번째로 찾은 점은 시작점
+            } else {
+                endPoint = point;    // 두 번째로 찾은 점은 끝점
+            }
+        }
+    }
+    
+    return {startPoint, endPoint};
+}
+
+
+std::vector<cv::Point> findTurningPoints(const std::vector<cv::Point>& coords, int windowSize) {
+    std::vector<cv::Point> turningPoints;
+
+    for (size_t i = windowSize; i < coords.size() - windowSize; ++i) {
+        // 기울기 계산을 위해 현재 윈도우의 좌표를 사용
+        double avgSlope1 = 0.0;
+        double avgSlope2 = 0.0;
+
+        // 이전 윈도우의 평균 기울기
+        for (int j = 1; j <= windowSize; ++j) {
+            double slope = (coords[i].x - coords[i - j].x != 0) ? 
+                           static_cast<double>(coords[i].y - coords[i - j].y) / (coords[i].x - coords[i - j].x) : 
+                           std::numeric_limits<double>::infinity();
+            avgSlope1 += slope;
+        }
+        avgSlope1 /= windowSize;
+
+        // 이후 윈도우의 평균 기울기
+        for (int j = 1; j <= windowSize; ++j) {
+            double slope = (coords[i + j].x - coords[i].x != 0) ? 
+                           static_cast<double>(coords[i + j].y - coords[i].y) / (coords[i + j].x - coords[i].x) : 
+                           std::numeric_limits<double>::infinity();
+            avgSlope2 += slope;
+        }
+        avgSlope2 /= windowSize;
+
+        double diff_slop = std::abs(avgSlope1 - avgSlope2);
+        cout <<"diff_slop: " << diff_slop << ", avgSlope1: "  << avgSlope1 << " ,avgSlope2: "  << avgSlope2 <<  endl;
+
+        // 평균 기울기 변화가 있을 경우 꺾이는 지점 추가
+        //if (avgSlope1 == std::numeric_limits<double>::infinity() && avgSlope2 == std::numeric_limits<double>::infinity())            
+        if (diff_slop != std::numeric_limits<double>::infinity())        
+        {
+            if (diff_slop > 0.5)
+                turningPoints.emplace_back(coords[i].x, coords[i].y);
+        }
+    }
+
+    mergeClosePoints(turningPoints, 6);
+    return turningPoints;
+}
+
+
+std::vector<cv::Point> findTurningChainPoints(const std::vector<cv::Point>& coords, int windowSize)
+{
+    std::vector<cv::Point> turningPoints;
+
+    for (size_t i = windowSize; i < coords.size() - windowSize; ++i) {
+        double avgDir1 = 0.0;
+        double avgDir2 = 0.0;
+
+        // 이전 윈도우의 평균 방향
+        for (int j = 1; j <= windowSize; ++j) {
+            double dir = std::atan2(coords[i].y - coords[i - j].y, coords[i].x - coords[i - j].x);
+            avgDir1 += dir;
+        }
+        avgDir1 /= windowSize;
+
+        // 이후 윈도우의 평균 방향
+        for (int j = 1; j <= windowSize; ++j) {
+            double dir = std::atan2(coords[i + j].y - coords[i].y, coords[i + j].x - coords[i].x);
+            avgDir2 += dir;
+        }
+        avgDir2 /= windowSize;
+
+        // 방향 차이를 계산하고 각도 변환
+        double angleDiff = std::abs(avgDir1 - avgDir2) * 180.0 / M_PI;
+
+        cout << "angleDiff: "<< angleDiff << endl;
+        // 각도 차이가 45도 이상일 때 꺾이는 지점 추가
+        if (angleDiff >= 60.0) {
+            turningPoints.emplace_back(coords[i].x, coords[i].y);
+        }
+    }
+
+    
+    mergeClosePoints(turningPoints, 6);
+    return turningPoints;
+}
+
+
 int main() {
     std::string home_path = getenv("HOME");
     // std::cout << home_path << std::endl;
 
     // 이미지 파일 경로
-    cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+    cv::Mat raw_img  = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+    //cv::Mat wall_img = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid_wall.png", cv::IMREAD_GRAYSCALE);
+    //cv::imshow("wall_img", wall_img);
     //cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
     if (raw_img.empty())
     {
@@ -591,21 +859,97 @@ int main() {
         return -1;
     }
 
-    cv::Mat result_img;
-    cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
-    cv::Mat result_img2 = result_img.clone();
+    cv::Mat img_wall = makeImageWall(raw_img);//(occupancyMap);    
+    imshow("occupancyMap", img_wall);
 
-    FeatureDetection fd(raw_img);
-    fd.straightLineDetection();
 
-    // 병합 픽셀 설정: 9, 12;
-    fd.detectEndPoints(9);
-    std::vector<cv::Point> fpoints = fd.getUpdateFeaturePoints();
+    // detect edge line
+    std::vector<std::vector<cv::Point>> edgeChains;
+    uchar *occupancy_map = img_wall.data;    
+    int rows = img_wall.rows;
+    int cols = img_wall.cols;
+    MSED edgeDetector;
+    edgeDetector.MSEdge(occupancy_map, rows, cols, edgeChains);
+
+    cout << "edgeChains.size(): " << edgeChains.size() << endl;
+    cv::Mat edgeImg = cv::Mat::zeros(rows, cols, CV_8UC1);
+     
+    std::vector<EDGEINFO> ptData;
+    for (int i = 0; i < edgeChains.size(); i++)
+    {
+        //cout << "edgeChainsPixel.size(): " << edgeChains[i].size() << endl;
+
+        for (int j = 0; j < edgeChains[i].size(); j++)
+        {
+            // edgeChains 좌표 변경해야 됨
+            int y0 = edgeChains[i][j].y;
+            int x0 = edgeChains[i][j].x;
+            edgeImg.at<uchar>(y0, x0) = 255;
+            //std::cout << "(" << x0 << ", " << y0 << ")";              
+        }        
+
+        
+        // cv::imshow("edgeImg", edgeImg);
+        // cv::waitKey(0); 
+
+        
+        int index_end = edgeChains[i].size()-1;
+        cv::Point startPt = edgeChains[i][0];        
+        cv::Point endPt = edgeChains[i][index_end];
+
+        
+        EDGEINFO pts;
+        pts.startPt = startPt;
+        pts.endPt = endPt;
+        
+        pts.turningPoints = findTurningPoints(edgeChains[i], 6);
+        pts.turningPoints2 = findTurningChainPoints(edgeChains[i], 6);        
+        ptData.push_back(pts);  
+    }
+
+    cv::Mat edgeImgColor;
+    cv::cvtColor(edgeImg, edgeImgColor, COLOR_GRAY2BGR);
+
+    std::vector<cv::Point> featurePts;
+
+    for (size_t i =0; i< ptData.size(); i++)
+    {
+
+        cv::Point s = ptData[i].startPt;
+        cv::Point e = ptData[i].endPt;
+
+        cv::circle(edgeImgColor, s, 3, CV_RGB(255, 0, 0), -1);
+        cv::circle(edgeImgColor, e, 3, CV_RGB(255, 0, 0), -1);
+        
+        featurePts.push_back(Point(ptData[i].startPt));
+        featurePts.push_back(Point(ptData[i].endPt));
+
+        for (size_t j =0; j <ptData[i].turningPoints.size(); j++)
+        {   
+            featurePts.push_back(ptData[i].turningPoints[j]);
+            cv::circle(edgeImgColor, ptData[i].turningPoints[j], 3, CV_RGB(0, 255, 0), -1);            
+        }
+
+        for (size_t j =0; j <ptData[i].turningPoints2.size(); j++)
+        {
+            featurePts.push_back(ptData[i].turningPoints2[j]);
+            cv::circle(edgeImgColor, ptData[i].turningPoints2[j], 3, CV_RGB(0, 255, 255), -1);            
+        } 
+    }
  
 
-    for (size_t i = 0; i< fpoints.size(); i++)
+    cv::imshow("edgeImgColor", edgeImgColor);  
+    imshow("edgeImg", edgeImg);
+
+    //namedWindow("occupancyMap_color", WINDOW_KEEPRATIO && WINDOW_AUTOSIZE);
+    //imshow("occupancyMap_color", occupancyMap_color);
+
+  
+    cv::Mat result_img;
+    cv::cvtColor(raw_img, result_img, cv::COLOR_GRAY2RGB);
+    for (size_t i = 0; i< featurePts.size(); i++)
     {
-        cv::Point pt = fpoints[i];;
+        cv::Point pt = featurePts[i];
         cv::circle(result_img, pt, 3, CV_RGB(0, 255, 0), -1); 
     }
     
@@ -614,10 +958,7 @@ int main() {
     
     cv::Mat img_freeSpace = makeFreeSpace(raw_img);
     imshow("img_freeSpace", img_freeSpace);
-
-    //-----------------------------------------------------
  
-
     //-----------------------------------------------------
 
     TrajectionPoint tp;
@@ -655,8 +996,9 @@ int main() {
         cv::circle(result_img, pt, 1, CV_RGB(255, 0, 0), -1);
     }
 
-    int radius = 15; // 탐색 범위 반지름
-    vector<Point> circlesCenters = addHalfOverlappingCircles(sorted_trajectory_points, radius);
+    int radius = 20; // 탐색 범위 반지름
+    //vector<Point> circlesCenters = addHalfOverlappingCircles(sorted_trajectory_points, radius);
+    vector<Point> circlesCenters = addNOverlappingCircles(sorted_trajectory_points, radius);
 
     // # 1
     // for (size_t i = 0; i < circlesCenters.size(); i++)
@@ -688,7 +1030,7 @@ int main() {
     for (size_t i = 0; i < circlesCenters.size(); )
     {
         cv::Point cp = circlesCenters[i];
-        SEGDATA db = testExploreFeature3( fpoints, sorted_trajectory_points, cp, radius);
+        SEGDATA db = testExploreFeature3( featurePts, sorted_trajectory_points, cp, radius);
                     
         
         if ( db.feturePoints.size() < 2)  { 
@@ -705,8 +1047,7 @@ int main() {
             std::cout << "-----------------------------------------------------" <<std::endl;
             std::cout << "Key Point:(" << db.centerPoint.x << ", " << db.centerPoint.y << ")\n";            
             
-            
-            /*
+              
             // #2
             // for (const auto &pt : db.feturePoints)
             // {
@@ -724,10 +1065,48 @@ int main() {
             //     cv::line(result_img, cv::Point(pt), cv::Point(closestPt), CV_RGB(255, 0, 0), 1);
 
             // };  
-            */
              
+            
+            std::cout << "FeaturePt:\n"; 
+            for (const auto &pt : db.feturePoints)
+            {
+                std::cout << "("<< pt.x << ", " << pt.y << ") "; 
+            }
+            std::cout << std::endl;
 
+
+             // // 좌표를 순차적으로 정렬
+            // std::vector<cv::Point> sortedPoints = sortPointsSequentially(db.feturePoints); 
+            // for (const auto &pt : sortedPoints)
+            // {
+            //     std::cout << "("<< pt.x << ", " << pt.y << ") "; 
+            // }
+
+
+            // 좌표를 원점 기준으로 정렬
+            //sortPointsByDistanceFromOrigin(db.feturePoints); 
+            
+            // 좌표를 시계방향으로 정렬
+            //sortPointsClockwise(db.feturePoints); 
+
+
+            // 원점에서 가장 가까운 점을 찾기
+            cv::Point closestPoint = findClosestPointToOrigin(db.feturePoints);
+
+            // 가장 가까운 점을 기준으로 시계방향 정렬
+            sortPointsClockwiseFromReference(db.feturePoints, closestPoint);
+
+            for (const auto &pt : db.feturePoints)
+            {
+                std::cout << "("<< pt.x << ", " << pt.y << ") "; 
+            }
+ 
+
+            std::cout << std::endl;
             int numPoints = db.feturePoints.size();  
+            
+            //---------------------------------------------------------------------------------------------------------
+            
             // 쌍을 정의 (PointPair 사용)
             std::vector<PointPair> pairs;  
             if (numPoints > 2) 
@@ -749,14 +1128,17 @@ int main() {
                 }  
             }
 
+            //---------------------------------------------------------------------------------------------------------
             std::cout << std::endl;
             for (size_t t=0; t<pairs.size(); t++)
             {
                 std::cout <<"("<<pairs[t].p1.x << ", " << pairs[t].p1.y << ") - ("<<pairs[t].p2.x << ", " << pairs[t].p2.y 
                 << ") dist: " << pairs[t].dist << endl; 
-                if (pairs[t].dist < 15)
+
+                if (pairs[t].dist < 20)
                 {
-                    cv::line(img_freeSpace, cv::Point(pairs[t].p1), cv::Point(pairs[t].p2), cv::Scalar(0), 2);  
+                    cv::line(img_freeSpace, cv::Point(pairs[t].p1), cv::Point(pairs[t].p2), cv::Scalar(0), 2);
+                    cv::line(result_img, cv::Point(pairs[t].p1), cv::Point(pairs[t].p2), cv::Scalar(0, 0, 255), 2);   
                 } 
             }  
 
@@ -771,25 +1153,62 @@ int main() {
             std::cout <<std::endl;
             std::cout <<"-----------------------------------------------------" <<std::endl;   
             ++i; 
-        } 
+        }
+
+        namedWindow("occupancyMap_color", WINDOW_KEEPRATIO && WINDOW_AUTOSIZE);
+        cv::imshow("result_img2", result_img);
+        cv::imshow("img_freeSpace2", img_freeSpace);
+        
+        cv::waitKey();
+
     }
-
-
-
-
-
-
-    cv::imshow("result_img2", result_img);
-
-    cv::imshow("img_freeSpace2", img_freeSpace);
     
-    
+
+
+    /*
     cv::Mat dst;
     double scaleFactor = 1.5;
     cv::resize(result_img, dst, cv::Size(), scaleFactor, scaleFactor);
     cv::imshow("dst", dst);
+    */
+
+    //  // 외곽선 검출
+    // std::vector<std::vector<cv::Point>> contours;
+    // std::vector<cv::Vec4i> hierarchy;
+
+    // cv::findContours(img_freeSpace, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+
+    
+    // // 외곽선을 그리기 위한 컬러 이미지로 변환
+    // cv::Mat contourImage = cv::Mat::zeros(img_freeSpace.size(), CV_8UC3);
+    // cv::Mat contourImage2 = contourImage.clone();
+
+    // for (size_t i = 0; i < contours.size(); i++) {
+
+    //     std::vector<cv::Point> approx;
+    //     double epsilon = 0.001 * cv::arcLength(contours[i], true); 
+    //     cv::approxPolyDP(contours[i], approx, epsilon, true);
+
+    //     double perimeter = cv::arcLength(approx, true);  // 근사화된 외곽선의 길이
+    //     double area = cv::contourArea(approx);  // 근사화된 외곽선의 면적 
+
+    //     //std::cout << "1 Contour " << i << " has length: " << perimeter << " and area: " << area << std::endl;
+    //     cv::drawContours(contourImage, std::vector<std::vector<cv::Point>>{approx}, -1, cv::Scalar(0, 255, 0), 1);  
+
+    //     if (area > 15 && perimeter > 15 ) 
+    //     {
+    //         cv::drawContours(contourImage2, std::vector<std::vector<cv::Point>>{approx}, -1, cv::Scalar(0, 255, 0), 1);  
+    //         std::cout << "2 Contour " << i << " has length: " << perimeter << " and area: " << area << std::endl;
+    //     }
+        
+    // }
+
+
+    // cv::imshow("Contours", contourImage);
+    // cv::imshow("contours2", contourImage2);
+    
     cv::waitKey();
- 
+
 
 
 
@@ -799,4 +1218,3 @@ int main() {
         return 0;
     }
 
-     
