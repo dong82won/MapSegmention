@@ -20,7 +20,9 @@ file(GLOB SOURCES "src/*.cpp")
 add_subdirectory(LSD)
 add_subdirectory(RegionRoomSegmentaion)
 
-add_executable(${CMAKE_PROJECT_NAME} main_room_seg9.cpp ${SOURCES})
+#add_executable(${CMAKE_PROJECT_NAME} test.cpp ${SOURCES})
+add_executable(${CMAKE_PROJECT_NAME} run_test.cpp ${SOURCES})
+
 target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC RegionRoomSegmentaion LSD ${OpenCV_LIBS})  
 
 # file(GLOB all_srcs "./src/*.cpp")

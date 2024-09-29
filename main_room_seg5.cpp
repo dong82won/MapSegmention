@@ -982,7 +982,7 @@ int main() {
     // std::cout << home_path << std::endl;
 
     // 이미지 파일 경로
-    cv::Mat raw_img  = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
+    cv::Mat raw_img  = cv::imread(home_path + "/myStudyCode/MapSegmention/imgdb/occupancy_grid.png", cv::IMREAD_GRAYSCALE);
     //cv::Mat wall_img = cv::imread(home_path + "/myWorkCode/MapSegmention/imgdb/occupancy_grid_wall.png", cv::IMREAD_GRAYSCALE);
     //cv::imshow("wall_img", wall_img);
     //cv::Mat raw_img = cv::imread(home_path + "/myWorkCode/regonSeg/imgdb/caffe_map.pgm", cv::IMREAD_GRAYSCALE);
