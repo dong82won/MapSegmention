@@ -100,7 +100,8 @@ private:
   std::vector<cv::Rect> regions_box_;
 
   Mat img_fill_region_; 
-
+  Mat img_label_;
+  Mat img_segroom_;
 
   cv::Vec4i findLongestLine(const std::vector<cv::Vec4i> &lines);
   void zhangSuenThinning(const cv::Mat &src, cv::Mat &dst);
@@ -142,7 +143,7 @@ private:
   void buildDataBaseTest(const cv::Mat& img_color_map);
 
   cv::Point findNearestBlackPoint(const cv::Mat& image, cv::Point center);
-  void regionGrowing(const cv::Mat &binaryImage, cv::Mat &output, cv::Point seed, uchar fillColor);
+  //void regionGrowing(const cv::Mat &binaryImage, cv::Mat &output, cv::Point seed, uchar fillColor);
 
 public:
 
@@ -205,20 +206,38 @@ public:
     return regions_box_;
   }
 
+  cv::Mat getLabelImage()
+  {
+    return img_label_;
+  }
+
+  cv::Mat getSegImage()
+  {
+    return img_segroom_;
+  }
+
+
+
   void extractWallElements(const cv::Mat &occupancyMap, uchar thread_wall_value = 64);
+  
   void makeRotatedImage();
+  void makeRotatedImage(const cv::Mat& img_raw);
+  void makeRotatedAngle();
+
+
   void makeGridSnappingContours(int length_contours=15, int gridSize=3);
   
   void extractFeaturePts();
   
-  void makeRotatedImage(const cv::Mat& img_raw);
+  
   void extracTrajectorPts();
 
   void extractVirtualLine(double length_virtual_line = 22);
   void classificationRegon();
 
-  void segmentationRegion();
+  //void segmentationRegion();
   void makeRegionContour();
+  void segmentationRoom();
 
 };
 

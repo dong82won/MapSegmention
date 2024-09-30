@@ -75,14 +75,26 @@ void ROOMSEG::makeRotatedImage()
 
 void ROOMSEG::makeRotatedImage(const cv::Mat& img_raw)
 {
-    Point2f center(cols_/2.0, rows_/2.0);
-    Mat rotationMatrix = getRotationMatrix2D(center, angle_, 1.0);
+    cv::Point2f center(cols_/2.0, rows_/2.0);
+    cv::Mat rotationMatrix = getRotationMatrix2D(center, angle_, 1.0);
     
     // 변환 행렬의 이동을 수정하여 이미지가 잘리지 않도록 설정
     rotationMatrix.at<double>(0, 2) += (cols_rot_ / 2.0) - center.x;
     rotationMatrix.at<double>(1, 2) += (rows_rot_ / 2.0) - center.y;
 
-    warpAffine(img_raw, img_raw_rotated_, rotationMatrix, Size(cols_rot_, rows_rot_));    
+    warpAffine(img_raw, img_raw_rotated_, rotationMatrix, Size(cols_rot_, rows_rot_));
+}
+
+void ROOMSEG::makeRotatedAngle()
+{
+    cv::Point2f center(cols_rot_/2.0, rows_rot_/2.0);
+    cv::Mat rotationMatrix = getRotationMatrix2D(center, -angle_, 1.0);
+    
+    // 변환 행렬의 이동을 수정하여 이미지가 잘리지 않도록 설정
+    rotationMatrix.at<double>(0, 2) += (cols_ / 2.0) - center.x;
+    rotationMatrix.at<double>(1, 2) += (rows_ / 2.0) - center.y;
+    
+    warpAffine(img_label_, img_segroom_, rotationMatrix, Size(cols_, rows_));
 }
 
 
@@ -256,15 +268,16 @@ void ROOMSEG::gridSnapping(const Mat& inputImage, Mat& outputImage, int gridSize
 void ROOMSEG::makeGridSnappingContours(int length_contours, int gridSize)
 {
 
-    Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));        
+    
     Mat img_dilate;
+    Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
     morphologyEx(img_wall_rotated_, img_dilate, MORPH_DILATE, kernel, Point(-1, -1), 1);
     imshow("img_dilate", img_dilate);
 
     cv::Mat img_skeletion; 
     zhangSuenThinning(img_dilate, img_skeletion);
     cv::imshow("img_wall_skeletion", img_skeletion);    
-  
+
     std::vector<cv::Point> skeletionPts = changeMatoPoint(img_skeletion);            
     
     //연결된 성분을 저장할 벡터
@@ -274,8 +287,7 @@ void ROOMSEG::makeGridSnappingContours(int length_contours, int gridSize)
     cv::Mat img_edge = cv::Mat::zeros(img_skeletion.size(), CV_8UC1);        
     
     for (size_t i = 0; i < edgePts.size(); i++)
-    {   
-      
+    {       
         //contours threshold
         if (edgePts[i].size() > length_contours)
         {
@@ -287,7 +299,6 @@ void ROOMSEG::makeGridSnappingContours(int length_contours, int gridSize)
             }
         }
     } 
-
     
     gridSnapping(img_edge, img_grid_, gridSize);    
     zhangSuenThinning(img_grid_, img_grid_skeletion_);
@@ -351,7 +362,6 @@ void ROOMSEG::extracTrajectorPts()
             }
         }
     }
-
 
     cv::Mat dist_transform;
     cv::distanceTransform(img_freeSpace_, dist_transform, cv::DIST_L2, 3);
@@ -736,19 +746,17 @@ std::vector<LINEINFO> ROOMSEG::removeDuplicatesLines(const std::vector<LINEINFO>
 
 void ROOMSEG::extractVirtualLine(double length_virtual_line)
 {
+    
     buildDataBase();
-
     // cv::Mat color_img_raw_rotated;
     // cv::cvtColor(img_raw_rotated_, color_img_raw_rotated, COLOR_GRAY2BGR);
     // buildDataBaseTest(color_img_raw_rotated);    
 
     std::vector<LINEINFO> contvert_type = convertToLineInfo(lineInfo_);     
-
     std::cout << "contvert_type.size(): " << contvert_type.size() << std::endl;
 
     // Remove duplicates
     std::vector<LINEINFO> unique_lines = removeDuplicatesLines(contvert_type);    
-
     std::cout << "unique_lines.size(): " << unique_lines.size() << std::endl;
 
     std::vector<LINEINFO> filtered_lines = fillterLine(unique_lines);
@@ -828,7 +836,7 @@ void ROOMSEG::classificationRegon()
         }        
     }
 }
-
+/*
 void ROOMSEG::regionGrowing(const cv::Mat &binaryImage, cv::Mat &output, cv::Point seed, uchar fillColor)
 {
     // 방향 벡터 (4-방향 또는 8-방향으로 탐색)
@@ -916,6 +924,7 @@ void ROOMSEG::segmentationRegion()
     }
     cv::imshow("img_fill_region", img_fill_region_);
 }
+*/
 
 void ROOMSEG::makeRegionContour()
 {
@@ -933,27 +942,21 @@ void ROOMSEG::makeRegionContour()
     cv::floodFill(img_grid2, cv::Point(5, 5), cv::Scalar(0));
     cv::imshow("img_grid4", img_grid2);
 
+}
 
+/*
      // 라벨링 결과 저장할 행렬 (labels)
     cv::Mat labels;
     int nLabels = cv::connectedComponents(img_grid2, labels, 8, CV_32S);
 
      // 라벨링된 결과에서 외곽선을 추출하기 위한 결과 이미지 (컬러)
-    cv::Mat output = cv::Mat::zeros(img_grid2.size(), CV_8UC3);
+    img_label_ = cv::Mat::zeros(img_grid2.size(), CV_8UC3);
     std::vector<cv::Vec3b> colors(nLabels);
 
    // 각 라벨에 무작위 색상 할당 (외곽선을 그리기 전 사용)    
     for (int i = 1; i < nLabels; i++) {
         colors[i] = cv::Vec3b(rand() % 256, rand() % 256, rand() % 256);
     }
-
-    //    // 라벨링된 결과 이미지를 출력할 준비
-    // for (int i = 0; i < labels.rows; i++) {
-    //     for (int j = 0; j < labels.cols; j++) {
-    //         int label = labels.at<int>(i, j);
-    //         output.at<cv::Vec3b>(i, j) = colors[label];
-    //     }
-    // }
 
      // 각 라벨의 외곽선을 추출하여 출력하기
     for (int label = 1; label < nLabels; label++) {
@@ -968,77 +971,16 @@ void ROOMSEG::makeRegionContour()
         cv::findContours(mask, contours, hierarchy, cv::RETR_CCOMP, cv::CHAIN_APPROX_SIMPLE);
 
         // 외곽선을 색상과 함께 그리기
-        cv::drawContours(output, contours, -1, colors[label], -1);
+        cv::drawContours(img_label_, contours, -1, colors[label], -1);
     }
 
      // 결과 이미지 출력
-    cv::imshow("Labeled Image", output);
+    cv::imshow("Labeled Image", img_label_);
+}
+*/
 
-
-
-
-//     cv::Mat img_region = extractMat2Mat(img_fill_region_);
-//     cv::imshow("img_region", img_region);
-
-//     // 모폴로지 확장을 위한 구조 요소 생성
-//     int kernelSize = 3; // 구조 요소의 크기
-//     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(kernelSize, kernelSize));
-
-//     // 모폴로지 확장 연산
-//     cv::Mat img_dilated;    
-//     cv::morphologyEx(img_region, img_dilated, cv::MORPH_DILATE, kernel);
-//     cv::imshow("img_dilated", img_dilated);
-
-
-//     // 라벨링 결과 저장할 행렬 (labels)
-//     cv::Mat labels;
-//     // 연결된 컴포넌트를 라벨링 (4-연결성 사용)
-//     int nLabels = cv::connectedComponents(img_dilated, labels, 4, CV_32S);
-
-
-//     std::vector<cv::Vec3b> colors(nLabels);
-//     // 각 라벨에 대해 무작위 색상을 생성하여 색을 할당
-//     //colors[0] = cv::Vec3b(0, 0, 0); // 배경은 검은색    
-//     for (int i = 1; i < nLabels; i++) {
-//         colors[i] = cv::Vec3b(rand() % 256, rand() % 256, rand() % 256);
-//     }
-    
-//     cv::Mat labels_regions = cv::Mat::zeros(img_region.size(), CV_8UC3);
-
-    
-//     // 각 라벨의 외곽선을 추출하여 출력하기
-//     for (int label = 1; label < nLabels; label++) {
-//         // 라벨 마스크를 생성
-//         cv::Mat mask = labels == label;
-
-//         // 외곽선 좌표 저장할 벡터
-//         std::vector<std::vector<cv::Point>> contours;
-//         std::vector<cv::Vec4i> hierarchy;
-
-//         // 외곽선 추출 (mask에서)
-//         cv::findContours(mask, contours, hierarchy, cv::RETR_CCOMP, cv::CHAIN_APPROX_SIMPLE);
-
-//         // 외곽선을 색상과 함께 그리기
-//         cv::drawContours(labels_regions, contours, -1, colors[label], 3);
-//     }
-
-//     cv::imshow("Labeled Image", labels_regions);
-
-
-//     cv::Mat img_color_raw_rotated;
-//     cvtColor(img_raw_rotated_, img_color_raw_rotated, COLOR_GRAY2BGR);
-
-//  // Alpha blending을 위한 변수 설정 (투명도)
-//     double alpha = 0.7;  // 첫 번째 이미지의 가중치
-//     double beta = 1.0 - alpha;  // 두 번째 이미지의 가중치
-    
-//     cv::Mat blended;
-
-//     // 두 이미지를 중첩합니다
-//     cv::addWeighted(img_color_raw_rotated, alpha, labels_regions, beta, 0.0, blended);
-
-//     // 결과 이미지를 출력합니다
-//     cv::imshow("Blended Image", blended);
+void ROOMSEG::segmentationRoom()
+{
 
 
 
